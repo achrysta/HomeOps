@@ -1,0 +1,42 @@
+# Инцидент «Пайплайн красный с утра». Запуск из этой папки:
+#   docker compose run --rm ci     — прогнать CI проекта (sh ci.sh), как раннер GitLab
+#   docker compose run --rm shell  — терминал (python, uv, ruff) в папке project
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть проект в исходное состояние
+# Сети не нужно: пакеты берутся из локального набора в образе (/wheels).
+name: inc-ci-lockfile
+
+x-runner: &runner
+  image: homeops-ci-python:1
+  build: ../_shared/ci-python
+  profiles: [tools]
+  working_dir: /scenario/project
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: ci-lockfile
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  ci:
+    <<: *runner
+    command: ["sh", "ci.sh"]
+  verify:
+    <<: *runner
+    working_dir: /scenario
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *runner
+    working_dir: /scenario
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *runner
+    command: ["bash"]
+    # описание терминала в дашборде: что есть в образе раннера и где открывается сессия
+    labels:
+      homeops.terminal: "Есть python, uv и ruff; сети нет — пакеты лежат в образе. Терминал открыт в папке project: пайплайн — sh ci.sh."
+    stdin_open: true
+    tty: true

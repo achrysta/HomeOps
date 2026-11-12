@@ -1,0 +1,4 @@
+#!/bin/sh
+# Автопроверка инцидента изнутри сервера: проверки из /opt/homeops/checks.py, отчёт — в дашборд.
+export CHECKS_FILE=/opt/homeops/checks.py REPORTS_DIR=/opt/homeops/reports
+exec python3 /opt/homeops/tools/verify.py "$@"

@@ -1,0 +1,30 @@
+# Сервис заказов: 2 реплики на рабочем узле — во время drain он переезжает и ждёт возвращения узла
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders
+  namespace: upgrade-ops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orders
+  template:
+    metadata:
+      labels:
+        app: orders
+    spec:
+      containers:
+        - name: orders
+          image: python:3.12-alpine
+          command: ["sh", "-c", "echo 'orders: ready to accept orders'; exec python -m http.server 8080"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }

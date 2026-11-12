@@ -1,0 +1,9 @@
+{
+  "model": "support-agent",
+  "model_url": "http://model:8000/v1/chat/completions",
+  "tools_url": "http://tools:8100/tools",
+  "tool_timeout_s": 5.0,
+  "tool_retries": 2,
+  "max_steps": 6,
+  "idempotent_tools": ["search_docs"]
+}

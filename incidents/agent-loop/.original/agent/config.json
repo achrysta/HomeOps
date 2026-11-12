@@ -1,0 +1,7 @@
+{
+  "model": "support-agent",
+  "model_url": "http://model:8000/v1/chat/completions",
+  "tools_url": "http://tools:8100/tools",
+  "tool_timeout_s": 1.0,
+  "tool_retries": 3
+}

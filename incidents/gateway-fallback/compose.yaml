@@ -1,0 +1,64 @@
+# Инцидент «Резервная модель есть, но пользователи получают 504». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд
+#   docker compose run --rm shell  — терминал внутри сети стенда (curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-gateway-fallback
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: gateway-fallback
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+x-llm: &llm
+  image: python:3.12-alpine
+  command: ["python", "-u", "/app/server.py"]
+  volumes:
+    - ../_shared/mockllm:/app:ro
+
+services:
+  # Основная модель. Сейчас она зависла: запросы висят без ответа.
+  # Режим можно менять: POST http://primary:8000/admin/mode {"mode": "ok" | "hang" | "error503" | "slow"}
+  primary:
+    <<: *llm
+    environment:
+      MODEL_NAME: qwen-primary
+      START_MODE: hang
+      TOKEN_DELAY: "0.03"
+
+  fallback:
+    <<: *llm
+    environment:
+      MODEL_NAME: qwen-small
+      TOKEN_DELAY: "0.015"
+
+  gateway:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/etc/gateway/app.py"]
+    depends_on: [primary, fallback]
+    volumes:
+      - ./gateway:/etc/gateway:ro
+    ports:
+      - "127.0.0.1:18102:4000"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true

@@ -1,0 +1,14 @@
+# Классы приоритета платформы: инференс для пользователей важнее ночного обучения
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: inference-critical
+value: 100000
+description: Онлайн-инференс для пользователей — может вытеснять обучение с GPU
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: batch-low
+value: 1000
+description: Обучение и пакетные задачи — уступают GPU инференсу

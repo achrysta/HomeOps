@@ -1,0 +1,54 @@
+# Инцидент «Ответы модели приходят одним куском». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд
+#   docker compose run --rm shell  — терминал внутри сети стенда (curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-sse-streaming
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: sse-streaming
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  # Внутренний LLM API (OpenAI-совместимый). В проде здесь vLLM.
+  llm:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/server.py"]
+    volumes:
+      - ../_shared/mockllm:/app:ro
+    environment:
+      MODEL_NAME: qwen2.5-7b-instruct
+      TOKEN_DELAY: "0.12"
+      PREFILL_PER_KCHAR: "0.75"
+
+  # Ingress перед моделью: через него ходят чат-бот и внутренние сервисы.
+  proxy:
+    image: nginx:1.27-alpine
+    depends_on: [llm]
+    volumes:
+      - ./nginx:/etc/nginx/conf.d:ro
+    ports:
+      - "127.0.0.1:18101:80"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true

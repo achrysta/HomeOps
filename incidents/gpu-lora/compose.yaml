@@ -1,0 +1,88 @@
+name: inc-gpu-lora
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ../_shared/gpu:/gpu:ro
+    - ./:/scenario
+  environment:
+    PYTHONPATH: /tools:/gpu
+    INCIDENT_ID: gpu-lora
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  model:
+    image: homeops-gpu-stand:1
+    build: ../_shared/gpu
+    platform: linux/amd64
+    gpus: all
+    shm_size: 2gb
+    labels:
+      homeops.requires: nvidia-gpu
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    volumes:
+      - ./config:/scenario/config:ro
+      - ../_shared/gpu/models:/models:ro
+      - adapters:/adapters
+      - scratch:/cache
+  gateway:
+    image: python:3.12-alpine
+    command: [python, -u, /gpu/gateway.py]
+    volumes:
+      - ../_shared/gpu:/gpu:ro
+      - ./config:/scenario/config:ro
+  prepare:
+    image: homeops-gpu-stand:1
+    build: ../_shared/gpu
+    platform: linux/amd64
+    profiles: [tools]
+    entrypoint: [python3, /opt/homeops-gpu/prepare.py]
+    volumes:
+      - ../_shared/gpu/models:/models
+  # Постоянный CPU-контейнер для лёгкого опроса; не получает GPU и не генерирует текст.
+  live:
+    <<: *tools
+    profiles: []
+    command: [sleep, infinity]
+    init: true
+    # Общий bind /gpu содержит кэш: helper видит только пустой read-only каталог.
+    tmpfs:
+      - /gpu/models:ro,size=1m,mode=0555
+    labels:
+      homeops.live: gpu
+    environment:
+      PYTHONPATH: /tools:/gpu
+      INCIDENT_ID: gpu-lora
+      DASHBOARD_URL: "off"
+    volumes:
+      - ../_tools:/tools:ro
+      - ../_shared/gpu:/gpu:ro
+      - ./:/scenario:ro
+
+  verify:
+    <<: *tools
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *tools
+    command: [python, /tools/reset.py]
+  shell:
+    <<: *tools
+    command: [sh]
+    stdin_open: true
+    tty: true
+    labels:
+      homeops.terminal: "curl, jq, dig, python; конфиги в /scenario/config"
+
+volumes:
+  adapters:
+  scratch:

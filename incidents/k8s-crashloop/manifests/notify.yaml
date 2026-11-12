@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notify
+  namespace: notify
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: notify
+  template:
+    metadata:
+      labels:
+        app: notify
+    spec:
+      containers:
+        - name: notify
+          image: python:3.12-alpine
+          command: ["pyhton", "-u", "/app/app.py"]
+          envFrom:
+            - configMapRef:
+                name: notify-config
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 20m
+              memory: 48Mi
+            limits:
+              memory: 48Mi
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: notify-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notify
+  namespace: notify
+spec:
+  selector:
+    app: notify
+  ports:
+    - port: 80
+      targetPort: 8080

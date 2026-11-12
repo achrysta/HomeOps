@@ -1,0 +1,12 @@
+# Продакшен: три реплики, логи уровня info
+namespace: orders-prod
+resources:
+  - ../../base
+patches:
+  - path: replicas.yaml
+configMapGenerator:
+  - name: orders-config
+    behavior: merge
+    literals:
+      - LOG-LEVEL=info
+      - APP_ENV=prod

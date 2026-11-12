@@ -1,0 +1,58 @@
+# Зал «Helm: установка, значения, откат, show values, template».
+# Стенд живёт в общем кластере kind (../_shared/k8s), namespace gym-helm. Из этой папки:
+#   docker compose -f ../_shared/k8s/compose.yaml run --rm cluster up  — кластер (один на все k8s-стенды)
+#   docker compose up -d --wait            — подготовить стенд в кластере
+#   docker compose exec kubectl bash -l    — терминал с kubectl
+#   docker compose exec kubectl python /tools/verify.py --live — живая проверка подходов
+#   docker compose up -d --wait --force-recreate — новая сессия с чистым namespace
+#   docker compose down                    — остановить рабочее место
+name: inc-gym-k8s-helm
+
+x-k8s: &k8s
+  image: homeops-k8s-tools:1
+  build: ../_shared/k8s/tools
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+    - kubeconfig:/kube:ro
+  environment:
+    INCIDENT_ID: gym-k8s-helm
+    K8S_NAMESPACE: gym-helm
+    K8S_NAMESPACES: gym-helm
+    # Зал засчитывается живой проверкой в дашборде, отчёты автопроверки не нужны
+    DASHBOARD_URL: "off"
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  # Рабочее место: готовит поломку в кластере и держит терминал с kubectl
+  kubectl:
+    <<: *k8s
+    labels: { homeops.role: k8s }
+    command: ["homeops-workspace"]
+    init: true
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/homeops-ready"]
+      interval: 2s
+      start_period: 5m
+      retries: 3
+
+  verify:
+    <<: *k8s
+    profiles: [tools]
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *k8s
+    profiles: [tools]
+    command: ["python", "/tools/reset.py"]
+
+networks:
+  default:
+    name: kind
+    external: true
+
+volumes:
+  kubeconfig:
+    name: homeops-k8s-kubeconfig
+    external: true

@@ -1,0 +1,10 @@
+[Unit]
+Description=API платежей
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/payments/api.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

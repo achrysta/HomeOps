@@ -1,0 +1,12 @@
+{
+  "timeout_s": 0.2,
+  "stream_passthrough": false,
+  "retry_429": false,
+  "retry_unsafe": true,
+  "backoff_s": 0,
+  "respect_retry_after": false,
+  "fallback": false,
+  "max_tokens": null,
+  "quota_per_minute": 0,
+  "request_ids": false
+}

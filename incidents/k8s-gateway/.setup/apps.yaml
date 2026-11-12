@@ -1,0 +1,64 @@
+# Приложения: витрина (namespace market) и API заказов (namespace market-api)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storefront
+  namespace: market
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: storefront }
+  template:
+    metadata:
+      labels: { app: storefront }
+    spec:
+      containers:
+        - name: web
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /, port: http }, periodSeconds: 3 }
+          resources: { requests: { cpu: 10m, memory: 24Mi }, limits: { memory: 48Mi } }
+          volumeMounts: [{ name: app, mountPath: /app }]
+      volumes: [{ name: app, configMap: { name: storefront-app } }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storefront
+  namespace: market
+spec:
+  selector: { app: storefront }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-api
+  namespace: market-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: orders-api }
+  template:
+    metadata:
+      labels: { app: orders-api }
+    spec:
+      containers:
+        - name: api
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 3 }
+          resources: { requests: { cpu: 10m, memory: 24Mi }, limits: { memory: 48Mi } }
+          volumeMounts: [{ name: app, mountPath: /app }]
+      volumes: [{ name: app, configMap: { name: orders-app } }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-api
+  namespace: market-api
+spec:
+  selector: { app: orders-api }
+  ports: [{ name: http, port: 80, targetPort: http }]

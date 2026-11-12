@@ -1,0 +1,52 @@
+name: inc-gym-mlflow
+
+x-workspace: &workspace
+  image: homeops-k8s-tools:1
+  build: ../_shared/k8s/tools
+  entrypoint: []
+  working_dir: /scenario
+  volumes:
+    - ./:/scenario:ro
+    - ../_tools:/tools:ro
+    - answers:/answers
+    - seed:/seed
+  environment:
+    INCIDENT_ID: gym-mlflow
+    DASHBOARD_URL: "off"
+    MLFLOW_URL: http://mlflow:5000
+
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.5.0
+    command: [mlflow, server, --host, 0.0.0.0, --port, "5000", --backend-store-uri, sqlite:////state/mlflow.db, --default-artifact-root, /state/artifacts, --no-serve-artifacts, --allowed-hosts, "mlflow:5000,localhost:5000"]
+    volumes: ["backend:/state"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=2)"]
+      interval: 2s
+      start_period: 60s
+      retries: 30
+  shell:
+    <<: *workspace
+    labels: { homeops.role: compose-gym, homeops.terminal: "bash, curl, jq, python; MLflow — http://mlflow:5000; ответы — /answers" }
+    depends_on:
+      mlflow: { condition: service_healthy }
+    command: [bash, -lc, "bash .setup/setup.sh && touch /tmp/homeops-ready && exec sleep infinity"]
+    init: true
+    healthcheck:
+      test: [CMD, test, -f, /tmp/homeops-ready]
+      interval: 2s
+      start_period: 60s
+      retries: 10
+  verify:
+    <<: *workspace
+    profiles: [tools]
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *workspace
+    profiles: [tools]
+    command: [python, -c, "from pathlib import Path; [p.unlink() for p in Path('/answers').iterdir() if p.is_file()]"]
+
+volumes:
+  backend:
+  answers:
+  seed:

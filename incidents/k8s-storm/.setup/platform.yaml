@@ -1,0 +1,19 @@
+# Правила платформы для namespace bazaar: квота на память и запрет входящего трафика по умолчанию
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: bazaar-quota
+  namespace: bazaar
+spec:
+  hard:
+    limits.memory: 448Mi
+    requests.memory: 256Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: bazaar
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]

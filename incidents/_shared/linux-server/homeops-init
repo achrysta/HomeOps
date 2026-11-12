@@ -1,0 +1,9 @@
+#!/bin/sh
+# Docker предоставляет собственный cgroup namespace (cgroup: private).
+# Делать bind mount cgroup хоста нельзя: в WSL его корень не совпадает с namespace контейнера.
+# SYS_ADMIN уже требуется учебному systemd-серверу; дополнительных привилегий не нужно.
+set -eu
+if [ "${1:-}" = /sbin/init ] && [ "$(stat -f -c %T /sys/fs/cgroup)" = cgroup2fs ]; then
+    mount -o remount,rw /sys/fs/cgroup
+fi
+exec "$@"

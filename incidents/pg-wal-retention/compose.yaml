@@ -1,0 +1,53 @@
+name: inc-pg-wal-retention
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: pg-wal-retention
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+    PGHOST: db
+    PGUSER: lab
+    PGPASSWORD: lab
+    PGDATABASE: shop
+    PGCONNECT_TIMEOUT: "2"
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  db:
+    image: postgres:18
+    command: [postgres, -c, min_wal_size=2MB, -c, max_wal_size=8MB, -c, checkpoint_timeout=1h]
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: shop
+      POSTGRES_INITDB_ARGS: --wal-segsize=1
+    volumes:
+      - ./fixture:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql:size=256m
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, lab, -d, shop]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  verify:
+    <<: *tools
+    profiles: [tools]
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *tools
+    profiles: [tools]
+    command: [python, /tools/reset.py]
+  shell:
+    <<: *tools
+    profiles: [tools]
+    command: [sh]
+    stdin_open: true
+    tty: true

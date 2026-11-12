@@ -1,0 +1,69 @@
+# Инцидент «API не стартует, воркер перезапускается каждые пару минут». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд
+#   docker compose run --rm shell  — терминал внутри сети стенда (curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down -v         — остановить
+name: inc-docker-oom-healthcheck
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: docker-oom-healthcheck
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  worker:
+    image: python:3.12-slim
+    command: ["python", "-u", "/app/worker.py"]
+    volumes:
+      - ./worker:/app:ro
+      - worker-data:/data
+    environment:
+      # Размер кэша справочников, МБ. Сами справочники занимают около 40 МБ.
+      PRELOAD_MB: "160"
+    # Лимит памяти задаёт платформа (как resources.limits.memory) — его менять нельзя
+    mem_limit: 96m
+    memswap_limit: 96m
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  api:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/api.py"]
+    volumes:
+      - ./api:/app:ro
+    depends_on:
+      worker:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18201:8000"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  worker-data:

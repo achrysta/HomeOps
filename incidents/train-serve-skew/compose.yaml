@@ -1,0 +1,43 @@
+# Инцидент «Офлайн всё отлично, а в проде модель оттока бесполезна». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд; сервис: http://localhost:18106
+#   docker compose run --rm shell  — терминал внутри сети стенда (curl, jq, python)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-train-serve-skew
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: train-serve-skew
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  model-api:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/srv/serving/app.py"]
+    volumes:
+      - ./model:/srv/model:ro
+      - ./serving:/srv/serving:ro
+    ports:
+      - "127.0.0.1:18106:8000"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true

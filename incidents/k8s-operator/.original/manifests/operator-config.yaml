@@ -1,0 +1,8 @@
+# Настройки оператора: в каких namespace он обслуживает Backup (через пробел)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-operator
+  namespace: ops-system
+data:
+  watch-namespaces: "billing payments"

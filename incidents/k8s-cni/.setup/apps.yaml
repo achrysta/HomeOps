@@ -1,0 +1,51 @@
+# Сервис отчётов и его клиент: оба на рабочем узле (control-plane закрыт taint-ом)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reports
+  namespace: netops
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: reports }
+  template:
+    metadata:
+      labels: { app: reports }
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: web
+          image: python:3.12-alpine
+          command: ["python", "-c", "import http.server, socket; h = type('H', (http.server.BaseHTTPRequestHandler,), {'do_GET': lambda s: (s.send_response(200), s.end_headers(), s.wfile.write(socket.gethostname().encode())), 'log_message': lambda *a: None}); http.server.ThreadingHTTPServer(('', 8080), h).serve_forever()"]
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { tcpSocket: { port: http }, periodSeconds: 3 }
+          resources: { requests: { cpu: 10m, memory: 24Mi }, limits: { memory: 48Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reports
+  namespace: netops
+spec:
+  selector: { app: reports }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: netops
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dashboard }
+  template:
+    metadata:
+      labels: { app: dashboard }
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: ui
+          image: python:3.12-alpine
+          command: ["sh", "-c", "while true; do python -c \"import urllib.request; print(urllib.request.urlopen('http://reports', timeout=3).read().decode())\" 2>&1 | tail -1; sleep 5; done"]
+          resources: { requests: { cpu: 10m, memory: 24Mi }, limits: { memory: 48Mi } }

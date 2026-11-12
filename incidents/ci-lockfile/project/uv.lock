@@ -1,0 +1,79 @@
+version = 1
+revision = 5
+requires-python = ">=3.12"
+
+[[package]]
+name = "colorama"
+version = "0.4.6"
+source = { registry = "/wheels" }
+wheels = [
+    { path = "/wheels/colorama-0.4.6-py2.py3-none-any.whl" },
+]
+
+[[package]]
+name = "iniconfig"
+version = "2.3.1"
+source = { registry = "/wheels" }
+wheels = [
+    { path = "/wheels/iniconfig-2.3.1-py3-none-any.whl" },
+]
+
+[[package]]
+name = "packaging"
+version = "21.3"
+source = { registry = "/wheels" }
+dependencies = [
+    { name = "pyparsing" },
+]
+wheels = [
+    { path = "/wheels/packaging-21.3-py3-none-any.whl" },
+]
+
+[[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "/wheels" }
+wheels = [
+    { path = "/wheels/pluggy-1.6.0-py3-none-any.whl" },
+]
+
+[[package]]
+name = "pyparsing"
+version = "3.3.3"
+source = { registry = "/wheels" }
+wheels = [
+    { path = "/wheels/pyparsing-3.3.3-py3-none-any.whl" },
+]
+
+[[package]]
+name = "pytest"
+version = "8.3.5"
+source = { registry = "/wheels" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+]
+wheels = [
+    { path = "/wheels/pytest-8.3.5-py3-none-any.whl" },
+]
+
+[[package]]
+name = "release-notes"
+version = "1.4.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "packaging" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "packaging", specifier = ">=21.3,<22" }]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.3,<9" }]

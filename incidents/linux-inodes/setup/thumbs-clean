@@ -1,0 +1,5 @@
+#!/bin/bash
+# Очистка кэша миниатюр: удаляет миниатюры старше 10 минут.
+set -euo pipefail
+n=$(find /srv/media/cache -type f -name '*.jpg' -mmin +10 -print -delete | wc -l)
+echo "Удалено миниатюр: $n"

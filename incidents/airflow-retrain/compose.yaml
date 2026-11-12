@@ -1,0 +1,109 @@
+# Инцидент «Ночное переобучение падает, а в реестре — версии-близнецы». Запуск из этой папки:
+#   docker compose up -d --build            — поднять стенд (первая сборка образа Airflow требует сети)
+#   docker compose run --rm shell           — терминал: airflow CLI, python, curl
+#   docker compose run --rm verify          — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset           — вернуть файлы стенда в исходное состояние
+#   docker compose down                     — остановить
+name: inc-airflow-retrain
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: airflow-retrain
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+x-airflow-env: &airflow-env
+  AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+  AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"
+  MLFLOW_TRACKING_URI: http://mlflow:5000
+  PYTHONPATH: /opt/airflow/project
+  AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+
+x-airflow: &airflow
+  image: homeops-airflow:1
+  build: ../_shared/airflow
+  volumes: &airflow-volumes
+    - ./dags:/opt/airflow/dags:ro
+    - ./ml:/opt/airflow/project/ml:ro
+    - ./data:/opt/airflow/data:ro
+
+services:
+  # Трекинг экспериментов и реестр моделей. Интерфейс: http://localhost:18117
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v3.5.0
+    command: ["mlflow", "server", "--host", "0.0.0.0", "--port", "5000", "--workers", "1",
+              "--allowed-hosts", "mlflow,mlflow:5000,localhost,localhost:18117,127.0.0.1:18117",
+              "--backend-store-uri", "sqlite:////tmp/mlflow.db", "--serve-artifacts", "--artifacts-destination", "/tmp/artifacts"]
+    ports:
+      - "127.0.0.1:18117:5000"
+
+  # Вебхук чата дежурных: иногда отвечает 502 с первой попытки. Не меняется.
+  webhook:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/server.py"]
+    volumes:
+      - ./webhook:/app:ro
+
+  # Airflow 3 одним процессом (standalone). Интерфейс: http://localhost:18116 — DAG train_model на паузе.
+  airflow:
+    <<: *airflow
+    command: ["standalone"]
+    environment: *airflow-env
+    depends_on: [mlflow, webhook]
+    ports:
+      - "127.0.0.1:18116:8080"
+
+  verify:
+    <<: *airflow
+    profiles: [tools]
+    user: "0:0"
+    working_dir: /scenario
+    entrypoint: ["python", "/tools/verify.py"]
+    environment:
+      <<: *airflow-env
+      INCIDENT_ID: airflow-retrain
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+      AIRFLOW_HOME: /tmp/homeops-airflow
+      # под root скрипт airflow ищет пакет в user site: он у пользователя airflow
+      HOME: /home/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags:ro
+      - ./ml:/opt/airflow/project/ml:ro
+      - ./data:/opt/airflow/data:ro
+      - ../_tools:/tools:ro
+      - ./:/scenario
+    extra_hosts:
+      - host.docker.internal:host-gateway
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *airflow
+    profiles: [tools]
+    user: "0:0"
+    working_dir: /scenario
+    # без /entrypoint Airflow: сервис стендов запускает терминал как «shell sleep 86400»
+    entrypoint: ["/usr/bin/dumb-init", "--"]
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+    labels:
+      homeops.terminal: "airflow CLI (перед airflow dags test — airflow db migrate), python, curl"
+    environment:
+      <<: *airflow-env
+      AIRFLOW_HOME: /tmp/homeops-airflow
+      # под root скрипт airflow ищет пакет в user site: он у пользователя airflow
+      HOME: /home/airflow
+    volumes:
+      - ./dags:/opt/airflow/dags:ro
+      - ./ml:/opt/airflow/project/ml:ro
+      - ./data:/opt/airflow/data:ro
+      - ./:/scenario

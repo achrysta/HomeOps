@@ -1,0 +1,39 @@
+#!/bin/bash
+# Поломка стенда в общем кластере. Стенд живёт в своих namespace (K8S_NAMESPACES через пробел).
+#   homeops-level setup     — пересоздать namespace и применить исходное состояние (.setup/setup.sh или manifests/)
+#   homeops-level teardown  — удалить namespace стенда (и то, что убирает .setup/teardown.sh)
+set -euo pipefail
+: "${K8S_NAMESPACES:?не задан K8S_NAMESPACES}"
+say() { printf '▸ %s\n' "$*"; }
+FIRST=${K8S_NAMESPACES%% *}
+
+teardown() {
+  [ -f /scenario/.setup/teardown.sh ] && bash /scenario/.setup/teardown.sh || true
+  # shellcheck disable=SC2086
+  kubectl delete namespace $K8S_NAMESPACES --ignore-not-found --wait="${1:-true}" --timeout=120s
+}
+
+setup() {
+  say "Готовлю стенд ${INCIDENT_ID:-} в namespace: $K8S_NAMESPACES"
+  teardown true >/dev/null
+  for ns in $K8S_NAMESPACES; do
+    kubectl create namespace "$ns" >/dev/null
+    kubectl label namespace "$ns" "homeops.local/incident=${INCIDENT_ID:-unknown}" >/dev/null
+  done
+  if [ -f /scenario/.setup/setup.sh ]; then
+    (cd /scenario && bash .setup/setup.sh)
+  else
+    kubectl apply -f /scenario/manifests/
+  fi
+  # Метка «стенд подготовлен этим контейнером»: перезапуск контейнера не сбрасывает работу,
+  # пересоздание (кнопка «Сбросить») — сбрасывает
+  kubectl annotate namespace "$FIRST" "homeops.local/setup=$HOSTNAME" --overwrite >/dev/null
+  say "Стенд готов"
+}
+
+case "${1:-}" in
+  setup) setup ;;
+  teardown) teardown false ;;
+  prepared) [ "$(kubectl get namespace "$FIRST" -o jsonpath='{.metadata.annotations.homeops\.dev/setup}' 2>/dev/null)" = "$HOSTNAME" ] ;;
+  *) echo "usage: homeops-level setup|teardown|prepared" >&2; exit 2 ;;
+esac

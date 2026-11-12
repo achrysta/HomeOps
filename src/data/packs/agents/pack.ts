@@ -1,0 +1,260 @@
+// Пакет «Агентные системы» (трек I): tool calling через gateway, MCP-серверы инструментов,
+// цикл агента с лимитами, трассировка, оценка и безопасность инструментов.
+// Основание — анализ рынка (октябрь 2026): агенты в 28% вакансий РФ и 34% зарубежных.
+import { interviewQuestion as q, resource as r, task as t } from '../../builders'
+import type { ContentPack } from '../index'
+
+export const pack: ContentPack = {
+  id: 'agents',
+  tracks: [
+    {
+      id: 'agents',
+      code: 'I',
+      title: 'Агентные системы',
+      goal: 'Как платформа обслуживает агентов: tool calling через gateway, MCP-серверы инструментов, цикл агента с лимитами, трассировка, оценка и безопасность инструментов. Фреймворк агентов не главное — главное, чтобы агент не зацикливался, не сжигал бюджет и не выполнял чужие инструкции.',
+      workProblem: 'Запускать агентов в production так, чтобы они останавливались по лимитам, были видны в трассировке и не выполняли опасные действия по внедрённой инструкции.',
+      entryRequirements: ['LLM Gateway трека C', 'Трассировка в Langfuse (трек F)', 'Docker Compose'],
+      learned: [
+        'Tool calling и MCP-сервер с авторизацией',
+        'Цикл агента с бюджетами и причиной остановки',
+        'Трассировка, стоимость и оценка агента',
+        'Песочница и защита от prompt injection',
+      ],
+      nextSteps: ['Добавьте оценку агента в eval gate трека G.', 'Запишите в заметке к задаче, как остановили зацикленного агента: сигнал, лимит, итог.'],
+      kind: 'core',
+      order: 10,
+      topics: [
+        'tool calling',
+        'JSON Schema аргументов',
+        'MCP: tools, resources, prompts',
+        'Streamable HTTP и stdio',
+        'цикл агента',
+        'max_steps и бюджеты',
+        'идемпотентность инструментов',
+        'трассировка агента',
+        'task success rate',
+        'песочница',
+        'indirect prompt injection',
+        'подтверждение человеком',
+      ],
+      acceptanceCriteria: [
+        'Агент решает задачи набора через MCP-инструменты, останавливается по лимитам и не выполняет внедрённую инструкцию',
+        'Есть отчёт оценки агента: успешность, шаги и стоимость на задачу, сравнение двух конфигураций',
+      ],
+    },
+  ],
+  skills: [
+    {
+      id: 'agents',
+      title: 'Агентные системы: tool calling и MCP',
+      description: 'Tool calling через gateway, MCP-серверы инструментов, цикл агента с лимитами, трассировка, оценка и безопасность инструментов',
+      baselineLevel: 0,
+    },
+  ],
+  requirements: [{ skillId: 'agents', importance: 'important', targetLevel: 3, summary: 'Агентные сценарии: инструменты, MCP, лимиты, оценка' }],
+  resources: [
+    r('ru-habr-agents-selectel', 'Как устроены LLM-агенты: архитектура, планирование и инструменты', 'article', 'https://habr.com/ru/companies/selectel/articles/916798/', 'Хабр, Selectel', 'ru'),
+    r('ru-habr-function-calling-mts', 'Вызов функций с помощью LLM', 'article', 'https://habr.com/ru/companies/mts_ai/articles/831220/', 'Хабр, МТС AI: формат tool calls и цикл вызова', 'ru'),
+    r('ru-habr-agent-sheets-sber', 'LLM-агент для работы с Google Spreadsheets', 'article', 'https://habr.com/ru/companies/sberdevices/articles/849458/', 'Хабр, SberDevices: цикл агента на рабочей задаче', 'ru'),
+    r('ru-habr-write-agent', 'Вам стоит написать своего агента', 'article', 'https://habr.com/ru/articles/966796/', 'Хабр: агент как цикл на Python без фреймворка', 'ru'),
+    r('ru-habr-mcp-practice', 'Model Context Protocol, обзор и практика', 'article', 'https://habr.com/ru/articles/890740/', 'Хабр: устройство MCP и свой сервер', 'ru'),
+    r('ru-habr-mcp-intro', 'MCP (Model Context Protocol)', 'article', 'https://habr.com/ru/articles/893482/', 'Хабр: инструмент агента выносится в MCP-сервер', 'ru'),
+    r('ru-habr-agent-eval', 'Инструменты, задачи, рассуждения: как понять, на что способен твой LLM-агент', 'article', 'https://habr.com/ru/articles/904880/', 'Хабр: оценка агентов, лишние вызовы и петли', 'ru'),
+    r('ru-habr-owasp-llm-bastion', 'OWASP Top 10 для LLM: разбор угроз', 'article', 'https://habr.com/ru/companies/bastion/articles/960918/', 'Хабр, Бастион: prompt injection и чрезмерная агентность', 'ru'),
+    r('mcp-intro', 'What is the Model Context Protocol (MCP)?', 'docs', 'https://modelcontextprotocol.io/docs/2026-07-28/getting-started/intro', 'Официальное введение'),
+    r('mcp-spec', 'Model Context Protocol — Specification', 'docs', 'https://modelcontextprotocol.io/specification/2026-07-28', 'Спецификация: tools, resources, prompts, безопасность'),
+    r('mcp-python-sdk', 'MCP Python SDK', 'docs', 'https://github.com/modelcontextprotocol/python-sdk', 'Официальный SDK: MCPServer, mcp run, mcp dev'),
+    r('mcp-inspector', 'MCP Inspector', 'docs', 'https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector', 'Проверка сервера: список инструментов и вызовы'),
+    r('vllm-tool-calling', 'vLLM — Tool Calling', 'docs', 'https://docs.vllm.ai/en/latest/features/tool_calling/', '--enable-auto-tool-choice, парсер hermes для Qwen2.5'),
+    r('llamacpp-function-calling', 'llama.cpp — Function calling', 'docs', 'https://github.com/ggml-org/llama.cpp/blob/master/docs/function-calling.md', 'llama-server --jinja, поддерживаемые шаблоны'),
+    r('owasp-llm-top10', 'OWASP Top 10 for LLM Applications', 'docs', 'https://genai.owasp.org/llm-top-10/', 'LLM01 Prompt Injection, LLM06 Excessive Agency'),
+    r('anthropic-effective-agents', 'Building Effective AI Agents', 'article', 'https://www.anthropic.com/engineering/building-effective-agents', 'Когда нужен агент, а когда хватит workflow'),
+    r('lf-agent-eval', 'Langfuse — Agent Evaluation', 'docs', 'https://langfuse.com/guides/cookbook/example_pydantic_ai_mcp_agent_evaluation', 'Оценка агента: итог, траектория, шаги'),
+    r('lf-sessions', 'Langfuse — Sessions', 'docs', 'https://langfuse.com/docs/observability/features/sessions', 'Группировка трейсов диалога агента'),
+  ],
+  tasks: [
+    t({
+      id: 'I0', trackId: 'agents', kind: 'reading', priority: 'P0',
+      title: 'Как устроены агенты: tool calling, цикл, MCP',
+      description:
+        'Агент — это цикл: модель получает описания инструментов, возвращает tool_calls с аргументами, приложение выполняет инструмент и передаёт результат следующим сообщением, пока модель не даст ответ или не сработает лимит. Разобрать: JSON Schema аргументов, tool_choice (auto, required, конкретная функция), параллельные вызовы, MCP как стандарт подключения инструментов (tools, resources, prompts; транспорты stdio и Streamable HTTP) и место платформы в этой схеме: gateway, лимиты, трассировка, права.',
+      resourceIds: ['ru-habr-agents-selectel', 'ru-habr-function-calling-mts', 'ru-habr-mcp-practice', 'anthropic-effective-agents', 'mcp-intro'],
+      acceptanceCriteria: [
+        'Могу нарисовать цикл агента и показать, что инструмент выполняет приложение, а не модель',
+        'Могу объяснить, чем MCP-сервер отличается от функции в коде агента и какие у него транспорты',
+      ],
+      tags: ['agents', 'reading'], vacancyRequirementIds: ['agents'],
+    }),
+    t({
+      id: 'I1', trackId: 'agents', kind: 'lab', priority: 'P0',
+      title: 'Tool calling через LLM Gateway',
+      description:
+        'Gateway трека C пропускает tools и tool_choice к модели и возвращает tool_calls клиенту. Локальная модель с поддержкой инструментов: на Mac — llama.cpp server с --jinja (Qwen2.5-3B-Instruct GGUF), на Windows — vLLM с --enable-auto-tool-choice --tool-call-parser hermes. До выполнения gateway проверяет аргументы по JSON Schema инструмента и считает вызовы и ошибки проверки в метриках.',
+      prerequisites: ['C4', 'I0'],
+      resourceIds: ['ru-habr-function-calling-mts', 'ru-habr-write-agent', 'llamacpp-function-calling', 'vllm-tool-calling'],
+      acceptanceCriteria: [
+        'Модель через gateway возвращает tool_calls для двух инструментов',
+        'Аргументы, не прошедшие JSON Schema, отклоняются до выполнения с понятной ошибкой',
+        'В метриках gateway видны число tool calls и ошибок проверки по инструментам',
+      ],
+      tags: ['agents', 'tool-calling', 'lab'], vacancyRequirementIds: ['agents', 'llm-gateway'],
+    }),
+    t({
+      id: 'I2', trackId: 'agents', kind: 'lab', priority: 'P0',
+      title: 'MCP-сервер инструментов в Docker',
+      description:
+        'Свой MCP-сервер на официальном Python SDK (пакет mcp, класс MCPServer; в старых версиях — FastMCP) с тремя инструментами: поиск по базе знаний (endpoint поиска трека E или заглушка), статус инцидента (только чтение) и создание тикета в SQLite с ключом идемпотентности. Транспорт Streamable HTTP за токеном, healthcheck, запуск в docker compose, проверка через MCP Inspector.',
+      prerequisites: ['I1'],
+      resourceIds: ['ru-habr-mcp-practice', 'ru-habr-mcp-intro', 'mcp-python-sdk', 'mcp-inspector', 'mcp-spec'],
+      acceptanceCriteria: [
+        'MCP Inspector видит три инструмента со схемами и вызывает их',
+        'Без токена сервер отвечает 401, с токеном — работает',
+        'Повторный вызов create_ticket с тем же ключом не создаёт дубль',
+      ],
+      tags: ['agents', 'mcp', 'lab'], vacancyRequirementIds: ['agents', 'ml-platform'],
+    }),
+    t({
+      id: 'IQ', trackId: 'agents', kind: 'quiz', priority: 'P0',
+      title: 'Контрольный тест: агентные системы',
+      description: 'Проверка понимания перед циклом агента: tool calling, MCP, лимиты и остановка, идемпотентность, трассировка, оценка агента, prompt injection и песочница.',
+      prerequisites: ['I0'],
+      resourceIds: ['ru-habr-agents-selectel', 'ru-habr-owasp-llm-bastion'],
+      acceptanceCriteria: ['Набрать не меньше 80% в контрольном тесте'],
+      tags: ['quiz'], vacancyRequirementIds: ['agents'],
+    }),
+    t({
+      id: 'I3', trackId: 'agents', kind: 'lab', priority: 'P0',
+      title: 'Цикл агента с лимитами и остановкой',
+      description:
+        'Runner агента без фреймворка (LangGraph — по желанию): модель через gateway, инструменты через MCP-клиент. Бюджеты: max_steps, лимит токенов и таймаут на задачу, таймаут на инструмент; детектор петли (тот же инструмент с теми же аргументами несколько раз подряд); повтор с backoff только для идемпотентных инструментов. Остановка всегда возвращает причину (done, max_steps, budget, timeout, loop) и частичный результат.',
+      prerequisites: ['I1', 'I2', 'IQ'],
+      resourceIds: ['ru-habr-write-agent', 'ru-habr-agent-sheets-sber', 'ru-habr-agent-eval', 'anthropic-effective-agents'],
+      acceptanceCriteria: [
+        'Агент решает три тестовые задачи через MCP-инструменты',
+        'Инструмент, который всегда падает, приводит к остановке по лимиту, а не к бесконечному циклу',
+        'Каждая остановка возвращает причину, потраченные шаги и токены',
+      ],
+      tags: ['agents', 'lab'], vacancyRequirementIds: ['agents'],
+    }),
+    t({
+      id: 'I4', trackId: 'agents', kind: 'lab', priority: 'P1',
+      title: 'Трассировка и стоимость агента в Langfuse',
+      description:
+        'Trace на задачу с вложенными observations: generation на каждый шаг модели, span на каждый вызов инструмента (имя, аргументы, длительность, ошибка), session для диалога. В метаданных — версия prompt, набор инструментов, причина остановки. Посчитать стоимость и число шагов на задачу, найти самый дорогой инструмент.',
+      prerequisites: ['I3', 'F2'],
+      resourceIds: ['ru-habr-llm-observability', 'lf-sessions', 'lf-agent-eval'],
+      acceptanceCriteria: [
+        'Trace показывает каждый шаг модели и вызов инструмента с длительностью',
+        'Для 10 задач посчитаны стоимость и число шагов',
+        'Причина остановки видна в метаданных trace',
+      ],
+      tags: ['agents', 'langfuse', 'lab'], vacancyRequirementIds: ['agents', 'llm-observability', 'token-cost'],
+    }),
+    t({
+      id: 'I5', trackId: 'agents', kind: 'integration', priority: 'P0',
+      title: 'Оценка агента на наборе задач и гейт в CI',
+      description:
+        'Набор из 20 задач с проверяемым итогом (состояние в SQLite, факты в ответе). Метрики: task success rate, точность вызова инструментов (нужный инструмент с валидными аргументами), шаги и стоимость на задачу, доля остановок по лимитам. Сравнить две конфигурации (модель или prompt) и оформить eval gate: pipeline падает, если успешность ниже порога или стоимость выше бюджета.',
+      prerequisites: ['I4', 'F3'],
+      resourceIds: ['ru-habr-agent-eval', 'lf-agent-eval', 'ru-habr-llm-observability'],
+      acceptanceCriteria: [
+        'Есть отчёт по 20 задачам: успешность, точность инструментов, шаги, стоимость',
+        'Сравнение двух конфигураций с выводом, какую выкатывать',
+        'Pipeline падает при успешности ниже порога',
+      ],
+      tags: ['agents', 'evaluation', 'lab'], vacancyRequirementIds: ['agents', 'llm-eval', 'eval-gates'],
+    }),
+    t({
+      id: 'I6', trackId: 'agents', kind: 'lab', priority: 'P1',
+      title: 'Песочница инструментов и защита от prompt injection',
+      description:
+        'Инструмент выполнения команд — в отдельном контейнере без сети, с read-only файловой системой, лимитами CPU и памяти и таймаутом. Инструменты с побочным эффектом — только по allowlist и с подтверждением человека. Тест indirect prompt injection: документ в базе знаний содержит инструкцию вызвать опасный инструмент — агент не должен её выполнить, и защита не должна держаться только на prompt.',
+      prerequisites: ['I3'],
+      resourceIds: ['ru-habr-owasp-llm-bastion', 'owasp-llm-top10', 'mcp-spec'],
+      acceptanceCriteria: [
+        'Песочница проверена: нет сети, файловая система только для чтения, лимиты и таймаут срабатывают',
+        'Инструмент с побочным эффектом не выполняется без подтверждения',
+        'Инструкция, внедрённая через документ, не приводит к вызову опасного инструмента',
+      ],
+      tags: ['agents', 'security', 'lab'], vacancyRequirementIds: ['agents'],
+    }),
+  ],
+  taskEstimates: {
+    I0: { minMinutes: 60, maxMinutes: 120, level: 'start' },
+    I1: { minMinutes: 120, maxMinutes: 240, level: 'practice' },
+    I2: { minMinutes: 120, maxMinutes: 240, level: 'practice' },
+    IQ: { minMinutes: 20, maxMinutes: 40, level: 'start' },
+    I3: { minMinutes: 180, maxMinutes: 300, level: 'practice' },
+    I4: { minMinutes: 90, maxMinutes: 180, level: 'practice' },
+    I5: { minMinutes: 240, maxMinutes: 420, level: 'challenge' },
+    I6: { minMinutes: 180, maxMinutes: 300, level: 'challenge' },
+  },
+  interviewTopics: [
+    {
+      id: 'iv-agents',
+      title: 'Агентные системы',
+      group: 'mlops',
+      trackIds: ['agents'],
+      skillIds: ['agents'],
+      incidentIds: ['agent-loop'],
+      questions: [
+        q('iv-ag-1', 'Как устроен tool calling и где выполняется инструмент?', [
+          'Модель получает описания инструментов с JSON Schema аргументов',
+          'Возвращает tool_calls — имя и аргументы, сама ничего не выполняет',
+          'Приложение выполняет инструмент и возвращает результат сообщением с ролью tool',
+          'Цикл повторяется, пока нет финального ответа или не сработал лимит',
+        ], 'Считать, что модель сама ходит в API или базу данных.', ['agents']),
+        q('iv-ag-2', 'Что такое MCP и зачем он платформе?', [
+          'Открытый протокол подключения инструментов и данных к LLM-приложениям поверх JSON-RPC',
+          'Сервер отдаёт tools, resources и prompts; клиент живёт в приложении-хосте',
+          'Транспорты: stdio для локального процесса, Streamable HTTP для развёрнутого сервиса',
+          'Платформе — единый каталог инструментов, авторизация и аудит вместо копий функций в каждом агенте',
+        ], 'Путать MCP с фреймворком агентов или с API самой модели.', ['agents']),
+        q('iv-ag-3', 'Агент зациклился и сжёг бюджет. Как это предотвратить?', [
+          'max_steps, бюджет токенов и времени на задачу',
+          'Детектор петли: одинаковые вызовы с теми же аргументами',
+          'Таймауты на инструмент; повторы только для идемпотентных',
+          'Остановка с причиной и частичным результатом, алерт на долю остановок по лимитам',
+        ], 'Полагаться на просьбу в prompt «не повторяй вызовы».', ['agents']),
+        q('iv-ag-4', 'Как оценивать агента?', [
+          'Набор задач с проверяемым итоговым состоянием, а не только текстом ответа',
+          'Task success rate, точность выбора инструментов и аргументов',
+          'Шаги, стоимость и латентность на задачу',
+          'Оценка траектории: лишние и опасные вызовы',
+          'Сравнение конфигураций и регрессионный гейт в CI',
+        ], 'Оценивать только финальный ответ judge-моделью.', ['agents']),
+        q('iv-ag-5', 'Что такое indirect prompt injection и как защитить агента?', [
+          'Инструкция приходит через данные: документ, страницу, ответ инструмента',
+          'Модель не различает данные и инструкции — защита не может держаться только на prompt',
+          'Минимальные права, allowlist и подтверждение человека для действий с побочным эффектом',
+          'Песочница для кода и команд, секреты вне досягаемости инструментов',
+          'Атаки — в наборе оценки агента, вызовы — в аудите',
+        ], 'Считать системный prompt достаточной защитой.', ['agents']),
+        q('iv-ag-6', 'Как сделать инструменты агента безопасными для повторов?', [
+          'Идемпотентность: ключ запроса, повтор не создаёт дубль',
+          'Разделение на чтение и действия с побочным эффектом',
+          'Таймауты и понятные ошибки, которые модель может обработать',
+          'Проверка аргументов по схеме до выполнения',
+        ], 'Повторять любой вызов, включая создание платежа или тикета.', ['agents']),
+        q('iv-ag-7', 'Что должна показывать трассировка агента?', [
+          'Trace на задачу: шаги модели и вызовы инструментов вложенными spans',
+          'Аргументы, результат или ошибка и длительность каждого вызова',
+          'Токены и стоимость по шагам и итог по задаче',
+          'Причина остановки, версия prompt и набор инструментов',
+        ], 'Логировать только финальный ответ агента.', ['agents']),
+        q('iv-ag-8', 'Как развернуть MCP-сервер в production?', [
+          'Streamable HTTP за авторизацией, а не stdio',
+          'Healthcheck, лимиты, таймауты и отдельные права на каждый инструмент',
+          'Версионирование схем инструментов: изменение схемы ломает агентов',
+          'Аудит вызовов и метрики по инструментам',
+        ], 'Открыть сервер инструментов без авторизации во внутренней сети.', ['agents']),
+        q('iv-ag-9', 'Когда агент не нужен и лучше простой workflow?', [
+          'Если шаги известны заранее — детерминированный пайплайн дешевле и предсказуемее',
+          'Агент оправдан, когда путь зависит от промежуточных результатов',
+          'Агент добавляет стоимость, латентность и риск ошибок',
+          'Начинать с одного вызова с инструментом, цикл — когда без него не обойтись',
+        ], 'Делать агента там, где хватает цепочки вызовов.', ['agents']),
+      ],
+    },
+  ],
+}

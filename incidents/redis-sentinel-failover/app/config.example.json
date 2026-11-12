@@ -1,0 +1,6 @@
+{
+  "sentinel": {
+    "master": "mymaster",
+    "nodes": ["sentinel-1:26379", "sentinel-2:26379", "sentinel-3:26379"]
+  }
+}

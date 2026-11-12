@@ -1,0 +1,6 @@
+{
+  "model": "baseline",
+  "accuracy": 0.86,
+  "p95_latency_ms": 1100,
+  "samples": 200
+}

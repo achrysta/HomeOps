@@ -1,0 +1,16 @@
+[Unit]
+Description=Подготовка учебного инцидента
+ConditionPathExists=/usr/local/lib/homeops/incident/setup.sh
+# только на свежем контейнере: после перезапуска сервера поломка не повторяется
+ConditionPathExists=!/var/lib/homeops/setup.done
+After=basic.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash /usr/local/lib/homeops/incident/setup.sh
+ExecStartPost=/bin/sh -c 'mkdir -p /var/lib/homeops && touch /var/lib/homeops/setup.done'
+ExecStartPost=-/bin/umount /usr/local/lib/homeops/incident
+
+[Install]
+WantedBy=multi-user.target

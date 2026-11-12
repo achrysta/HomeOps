@@ -1,0 +1,83 @@
+# Поды для разбора: падает с кодом выхода, убивается по памяти, не помещается на узел, здоровый веб
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crasher
+  namespace: gym-debug
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: crasher }
+  template:
+    metadata:
+      labels: { app: crasher }
+    spec:
+      containers:
+        - name: app
+          image: python:3.12-alpine
+          command: ["python", "-c", "print('config /etc/app/config.yaml not found'); raise SystemExit(3)"]
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { memory: 32Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hog
+  namespace: gym-debug
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: hog }
+  template:
+    metadata:
+      labels: { app: hog }
+    spec:
+      containers:
+        - name: app
+          image: python:3.12-alpine
+          command: ["python", "-c", "import time\nchunks = []\nwhile True:\n    chunks.append(bytearray(8 * 1024 * 1024))\n    time.sleep(0.2)"]
+          resources:
+            requests: { cpu: 5m, memory: 32Mi }
+            limits: { memory: 48Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pending
+  namespace: gym-debug
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: pending }
+  template:
+    metadata:
+      labels: { app: pending }
+    spec:
+      containers:
+        - name: app
+          image: python:3.12-alpine
+          command: ["sleep", "infinity"]
+          resources:
+            requests: { cpu: "64", memory: 32Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: gym-debug
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web, tier: frontend }
+    spec:
+      containers:
+        - name: web
+          image: python:3.12-alpine
+          command: ["python", "-m", "http.server", "8080"]
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { memory: 64Mi }

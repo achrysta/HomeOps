@@ -1,0 +1,4 @@
+# Окружение разработки: base как есть
+namespace: orders-dev
+resources:
+  - ../../base

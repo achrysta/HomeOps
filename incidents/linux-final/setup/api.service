@@ -1,0 +1,12 @@
+[Unit]
+Description=API заказов (127.0.0.1:9000)
+After=network.target
+
+[Service]
+User=api-svc
+ExecStart=/usr/bin/python3 /opt/api/app.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

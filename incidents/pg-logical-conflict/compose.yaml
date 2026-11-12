@@ -1,0 +1,82 @@
+# Инцидент «Витрина отчётов отстала от биллинга». Запуск из этой папки:
+#   docker compose up -d           — поднять стенд
+#   docker compose run --rm shell  — терминал в сети стенда (psql)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-pg-logical-conflict
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: pg-logical-conflict
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+    PGHOST: subscriber
+    PGUSER: lab
+    PGPASSWORD: lab
+    PGDATABASE: billing
+    PGCONNECT_TIMEOUT: "2"
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+x-db: &db
+  image: postgres:18
+  environment:
+    POSTGRES_USER: lab
+    POSTGRES_PASSWORD: lab
+    POSTGRES_DB: billing
+  tmpfs:
+    - /var/lib/postgresql:size=256m
+  healthcheck:
+    test: [CMD, pg_isready, -h, 127.0.0.1, -U, lab, -d, billing]
+    interval: 2s
+    timeout: 3s
+    retries: 30
+
+services:
+  # Биллинг: источник истины по счетам
+  publisher:
+    <<: *db
+    command: [postgres, -c, wal_level=logical]
+    volumes:
+      - ./publisher:/docker-entrypoint-initdb.d:ro
+  # Витрина отчётов: подписка sub_billing на публикацию pub_billing
+  subscriber:
+    <<: *db
+    volumes:
+      - ./subscriber:/docker-entrypoint-initdb.d:ro
+
+  # Подготовка инцидента; готова, когда события разыграны
+  setup:
+    image: postgres:18
+    entrypoint: [sh, /conf/setup.sh]
+    volumes:
+      - ./setup:/conf:ro
+    healthcheck:
+      test: [CMD, test, -f, /tmp/ready]
+      interval: 2s
+      timeout: 2s
+      retries: 60
+    depends_on:
+      publisher: { condition: service_healthy }
+      subscriber: { condition: service_healthy }
+
+  verify:
+    <<: *tools
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *tools
+    command: [python, /tools/reset.py]
+  shell:
+    <<: *tools
+    command: [sh]
+    labels:
+      homeops.terminal: "Есть psql: по умолчанию витрина (subscriber), биллинг — psql -h publisher. Пользователь lab — суперпользователь, база billing."
+    stdin_open: true
+    tty: true

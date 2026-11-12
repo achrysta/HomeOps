@@ -1,0 +1,20 @@
+# Воркеры: забирают заявки и считают отчёты (namespace reports-batch)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-worker
+  namespace: reports-batch
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: report-worker
+  template:
+    metadata:
+      labels:
+        app: report-worker
+    spec:
+      containers:
+        - name: worker
+          image: python:3.12-alpine
+          command: ["sh", "-c", "while true; do echo processing report batch; sleep 30; done"]

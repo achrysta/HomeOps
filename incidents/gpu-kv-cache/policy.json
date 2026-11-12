@@ -1,0 +1,6 @@
+{
+  "model": "Qwen/Qwen2.5-3B-Instruct",
+  "revision": "aa8e72537993ba99e69dfaafa59ed015b17504d1",
+  "max_gpu_util": 0.85,
+  "adapter_required": false
+}

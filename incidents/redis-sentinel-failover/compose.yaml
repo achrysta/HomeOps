@@ -1,0 +1,96 @@
+# Инцидент «Учения по переключению Redis провалились». Запуск из этой папки:
+#   docker compose up -d           — поднять стенд
+#   docker compose run --rm shell  — терминал в сети стенда (redis-cli, curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-redis-sentinel-failover
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: redis-sentinel-failover
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+x-node: &node
+  image: redis:7-alpine
+  volumes:
+    - ./redis:/conf:ro
+  healthcheck:
+    test: [CMD, redis-cli, ping]
+    interval: 2s
+    timeout: 2s
+    retries: 30
+
+x-sentinel: &sentinel
+  image: redis:7-alpine
+  command: [sh, /conf/start.sh]
+  volumes:
+    - ./sentinel:/conf:ro
+  # готов, когда видит остальных Sentinel и может собрать кворум
+  healthcheck:
+    test: [CMD-SHELL, "redis-cli -p 26379 SENTINEL CKQUORUM orders | grep -q ^OK"]
+    interval: 2s
+    timeout: 2s
+    retries: 30
+  depends_on:
+    redis-1: { condition: service_healthy }
+    redis-2: { condition: service_healthy }
+    redis-3: { condition: service_healthy }
+
+services:
+  redis-1:
+    <<: *node
+    command: [sh, /conf/start.sh, redis-1]
+  redis-2:
+    <<: *node
+    command: [sh, /conf/start.sh, redis-2]
+    depends_on:
+      redis-1: { condition: service_healthy }
+  redis-3:
+    <<: *node
+    command: [sh, /conf/start.sh, redis-3]
+    depends_on:
+      redis-1: { condition: service_healthy }
+
+  sentinel-1: *sentinel
+  sentinel-2: *sentinel
+  sentinel-3: *sentinel
+
+  # Сервис заказов: config.json читается при каждом запросе
+  app:
+    image: python:3.12-alpine
+    command: [python, -u, /app/app.py]
+    volumes:
+      - ./app:/app:ro
+    # здоров, когда пробная запись в Redis проходит
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      redis-1: { condition: service_healthy }
+
+  verify:
+    <<: *tools
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *tools
+    command: [python, /tools/reset.py]
+  shell:
+    <<: *tools
+    command: [sh]
+    labels:
+      homeops.terminal: "Есть redis-cli, curl и jq. Узлы redis-1..3:6379, Sentinel sentinel-1..3:26379, приложение app:8000."
+    stdin_open: true
+    tty: true

@@ -1,0 +1,87 @@
+# Инцидент «Касса зависла после обслуживания реплики». Запуск из этой папки:
+#   docker compose up -d           — поднять стенд
+#   docker compose run --rm shell  — терминал в сети стенда (psql)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-pg-sync-replica
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: pg-sync-replica
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+    PGHOST: primary
+    PGUSER: lab
+    PGPASSWORD: lab
+    PGDATABASE: shop
+    PGCONNECT_TIMEOUT: "2"
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  primary:
+    image: postgres:18
+    command: [postgres, -c, hba_file=/conf/pg_hba.conf]
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: shop
+    volumes:
+      - ./primary:/conf:ro
+      - ./primary/initdb:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      - /var/lib/postgresql:size=256m
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, lab, -d, shop]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Реплика в соседней стойке; standby1 из synchronous_standby_names на обслуживании до завтра
+  standby2:
+    image: postgres:18
+    entrypoint: [sh, /conf/start.sh]
+    volumes:
+      - ./standby:/conf:ro
+    tmpfs:
+      - /var/lib/postgresql:size=256m
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, lab, -d, shop]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+    depends_on:
+      primary: { condition: service_healthy }
+
+  # Касса: три оплаты, начатые перед инцидентом
+  cashier:
+    image: postgres:18
+    entrypoint: [sh, /conf/pay.sh]
+    environment:
+      PGPASSWORD: cashier
+    volumes:
+      - ./cashier:/conf:ro
+    depends_on:
+      primary: { condition: service_healthy }
+      standby2: { condition: service_healthy }
+
+  verify:
+    <<: *tools
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *tools
+    command: [python, /tools/reset.py]
+  shell:
+    <<: *tools
+    command: [sh]
+    labels:
+      homeops.terminal: "Есть psql (пользователь lab — суперпользователь), curl и jq. Узлы: primary (запись) и standby2 (реплика)."
+    stdin_open: true
+    tty: true

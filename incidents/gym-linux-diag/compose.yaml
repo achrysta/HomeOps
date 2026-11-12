@@ -1,0 +1,32 @@
+# Зал «Диагностика сервера: ss, systemctl, journalctl, du, lsof». Учебный сервер с systemd.
+# Ответы подходов пишутся в файлы /answers/… на сервере; дашборд сверяет их живой проверкой.
+#   docker compose up -d --build              — поднять сервер
+#   docker compose exec server bash -l        — войти на сервер
+#   docker compose exec server verify --live  — живая проверка подходов
+#   docker compose up -d --force-recreate     — новая сессия с исходным состоянием
+#   docker compose down                       — остановить
+name: inc-gym-linux-diag
+
+services:
+  server:
+    image: homeops-linux-server:1
+    build: ../_shared/linux-server
+    hostname: app-02
+    labels:
+      homeops.role: server
+    # systemd внутри контейнера: права на cgroup вместо полного --privileged
+    cap_add: [SYS_ADMIN]
+    security_opt: [seccomp=unconfined, apparmor=unconfined]
+    cgroup: private
+    tmpfs:
+      - /run
+      - /run/lock
+    volumes:
+      - ./setup:/usr/local/lib/homeops/incident:ro
+      - ../_tools:/opt/homeops/tools:ro
+      - ./checks.py:/opt/homeops/checks.py:ro
+      - ./.reports:/opt/homeops/reports
+    environment:
+      INCIDENT_ID: gym-linux-diag
+      # Зал засчитывается живой проверкой в дашборде, отчёты автопроверки не нужны
+      DASHBOARD_URL: "off"

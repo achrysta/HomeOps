@@ -1,0 +1,74 @@
+# Платформа стенда: хранилище моделей по HTTP и runtime для sklearn-моделей (из ServingRuntime KServe 0.20)
+apiVersion: v1
+kind: Service
+metadata:
+  name: models
+  namespace: ml-serve
+spec:
+  selector: { app: models }
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: models
+  namespace: ml-serve
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: models }
+  template:
+    metadata:
+      labels: { app: models }
+    spec:
+      containers:
+        - name: http
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "http.server", "8000", "--directory", "/srv"]
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            tcpSocket: { port: 8000 }
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 96Mi }
+          volumeMounts:
+            - { name: model, mountPath: /srv/churn/v1, readOnly: true }
+      volumes:
+        - name: model
+          configMap:
+            name: churn-model
+---
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: sklearn-runtime
+  namespace: ml-serve
+spec:
+  annotations:
+    prometheus.kserve.io/path: /metrics
+    prometheus.kserve.io/port: "8080"
+  supportedModelFormats:
+    - name: sklearn
+      version: "1"
+      autoSelect: true
+      priority: 1
+  protocolVersions: [v1, v2]
+  containers:
+    - name: kserve-container
+      image: kserve/sklearnserver:v0.20.0
+      imagePullPolicy: IfNotPresent
+      args:
+        - --model_name={{.Name}}
+        - --model_dir=/mnt/models
+        - --http_port=8080
+      resources:
+        requests: { cpu: 100m, memory: 256Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: [ALL] }
+        privileged: false
+        runAsNonRoot: true

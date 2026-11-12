@@ -1,0 +1,40 @@
+{
+  "name": "churn-lr",
+  "version": "3",
+  "trained_at": "2026-09-28",
+  "algorithm": "logistic regression (scikit-learn, StandardScaler + LogisticRegression)",
+  "offline_metrics": {
+    "roc_auc": 0.84,
+    "f1": 0.71
+  },
+  "features": [
+    {
+      "name": "monthly_spend",
+      "unit": "тыс. ₽ в месяц",
+      "mean": 4.2,
+      "std": 1.9,
+      "missing": "заполнялись средним по обучающей выборке"
+    },
+    {
+      "name": "tenure_months",
+      "unit": "месяцев с первой покупки",
+      "mean": 18.5,
+      "std": 11.2,
+      "missing": "заполнялись средним по обучающей выборке"
+    },
+    {
+      "name": "support_tickets",
+      "unit": "обращений в поддержку за 90 дней",
+      "mean": 1.3,
+      "std": 1.4,
+      "missing": "заполнялись средним по обучающей выборке"
+    }
+  ],
+  "weights": [
+    0.6,
+    -1.2,
+    0.9
+  ],
+  "bias": -0.5,
+  "threshold": 0.5
+}

@@ -1,0 +1,19 @@
+# Витрина: остаётся на Ingress до конца миграции на Gateway API (перенесено из старого кластера)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: market
+  namespace: market
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: market.example.test
+      http:
+        paths:
+          - path: /
+            pathType: Exact
+            backend:
+              service:
+                name: storefront
+                port:
+                  number: 80

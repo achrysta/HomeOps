@@ -1,0 +1,8 @@
+# Желаемая версия модели: её меняет команда ML, model-sync выкатывает
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-version
+  namespace: models
+data:
+  version: "2026.10.1"

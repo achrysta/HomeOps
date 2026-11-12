@@ -1,0 +1,74 @@
+# Поиск RAG — команда поиска, namespace rag
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-api
+  namespace: rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: search-api
+  template:
+    metadata:
+      labels:
+        app: search-api
+    spec:
+      containers:
+        - name: api
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          env:
+            - name: EMBEDDER_URL
+              value: http://embedder.embeddings.svc.cluster.local/embed
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: search-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: search-api
+  namespace: rag
+spec:
+  selector:
+    app: search-api
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+# Исходящий трафик поиска: только к сервису эмбеддингов
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: search-api-egress
+  namespace: rag
+spec:
+  podSelector:
+    matchLabels:
+      app: search-api
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              name: embeddings
+          podSelector:
+            matchLabels:
+              app: embedder
+      ports:
+        - port: 8080

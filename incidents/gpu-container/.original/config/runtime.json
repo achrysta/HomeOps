@@ -1,0 +1,10 @@
+{
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+  "gpu_memory_utilization": 0.35,
+  "max_model_len": 8192,
+  "max_num_seqs": 2,
+  "max_lora_rank": 16,
+  "enable_lora": false,
+  "adapter": "none"
+}

@@ -1,0 +1,63 @@
+# Векторная база RAG: индекс хранится в файле на томе, у каждой реплики — свой том
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: vectordb
+  namespace: vectors
+spec:
+  serviceName: vectordb
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vectordb
+  template:
+    metadata:
+      labels:
+        app: vectordb
+    spec:
+      containers:
+        - name: db
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          env:
+            - name: DATA_DIR
+              value: /var/lib/vectordb
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+            - name: index
+              mountPath: /data
+      volumes:
+        - name: app
+          configMap:
+            name: vectordb-app
+  volumeClaimTemplates:
+    - metadata:
+        name: index
+      spec:
+        accessModes: ["ReadWriteMany"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vectordb
+  namespace: vectors
+spec:
+  selector:
+    app: vectordb
+  ports:
+    - port: 80
+      targetPort: 8080

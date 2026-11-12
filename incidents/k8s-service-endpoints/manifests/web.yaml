@@ -1,0 +1,52 @@
+# Витрина магазина — namespace storefront
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: storefront
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      initContainers:
+        # не запускать витрину, пока каталог не появился в DNS
+        - name: wait-catalog
+          image: python:3.12-alpine
+          command: ["sh", "-c", "until getent hosts catalog; do echo waiting for catalog; sleep 2; done"]
+      containers:
+        - name: web
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          env:
+            - name: CATALOG_URL
+              value: http://catalog/products
+          ports:
+            - containerPort: 8080
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: web-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: storefront
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 8080

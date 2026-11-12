@@ -1,0 +1,6 @@
+[Unit]
+Description=Очистка кэша миниатюр
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/thumbs-clean

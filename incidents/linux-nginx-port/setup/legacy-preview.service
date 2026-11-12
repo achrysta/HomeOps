@@ -1,0 +1,11 @@
+[Unit]
+Description=Превью сайта (временно, до переезда на nginx)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -m http.server 80 --directory /srv/legacy
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

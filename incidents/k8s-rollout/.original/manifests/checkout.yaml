@@ -1,0 +1,61 @@
+# Оформление заказа: релиз 2.0.0 (новый базовый образ)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+  namespace: checkout
+  annotations:
+    kubernetes.io/change-cause: "release 2.0.0"
+spec:
+  replicas: 3
+  progressDeadlineSeconds: 60
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # ускорили выкатку: все поды обновляются разом
+      maxUnavailable: 100%
+      maxSurge: 0
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: checkout
+          image: python:3.12-alpine3.99
+          command: ["python", "-u", "/app/app.py"]
+          env:
+            - name: VERSION
+              value: "2.0.0"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 2
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: checkout-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout
+  namespace: checkout
+spec:
+  selector:
+    app: checkout
+  ports:
+    - port: 80
+      targetPort: 8080

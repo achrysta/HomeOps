@@ -1,0 +1,122 @@
+#!/bin/bash
+# Общий кластер Kubernetes-стендов на kind: control-plane + worker, kubeadm внутри узлов.
+#   homeops-cluster up      — создать (или проверить) кластер и выгрузить kubeconfig в общий том
+#   homeops-cluster down    — удалить кластер (образы остаются в Docker и загружаются заново за секунды)
+#   homeops-cluster status  — узлы кластера
+#   homeops-cluster prepare <стенд> — подготовить поломку в узлах для стенда уровня кластера:
+#                          образы из incidents/<стенд>/.setup/images.txt загружаются в узлы,
+#                          incidents/<стенд>/.setup/node-<control-plane|worker>.sh выполняются внутри узлов
+# Запускается в служебном сервисе cluster (у него сокет Docker): docker compose run --rm cluster up
+set -euo pipefail
+NAME=${KIND_CLUSTER_NAME:-homeops}
+[[ "$NAME" =~ ^[a-z][a-z0-9-]*$ ]] || { echo 'Некорректное имя кластера' >&2; exit 2; }
+CONFIG=/k8s/kind.yaml
+IMAGES=/k8s/images.txt
+OUT=/kube/config
+export KUBECONFIG=/tmp/kind-kubeconfig
+
+say() { printf '▸ %s\n' "$*"; }
+nodes() { docker ps "$@" --filter "label=io.x-k8s.kind.cluster=$NAME" --format '{{.Names}}'; }
+kc() { docker exec "$NAME-control-plane" kubectl --kubeconfig /etc/kubernetes/admin.conf "$@"; }
+
+# Два одновременных запуска не должны создавать кластер наперегонки
+exec 9>/kube/.lock
+flock 9
+
+create() {
+  say "Создаю кластер kind «$NAME»: control-plane + worker (первый раз 1–3 минуты, образ узла ~400 МБ)"
+  kind create cluster --name "$NAME" --config "$CONFIG" --wait 180s
+}
+
+preload() {
+  # Образы приложений стендов: тянем в Docker один раз и копируем в узлы — без сети при пересоздании кластера.
+  # Аргумент — файл со списком (по умолчанию общий images.txt; стенд может добавить свой .setup/images.txt).
+  # Свои образы homeops-k8s-<имя>:<тег> не скачиваются, а собираются из /k8s/<имя> (например, homeops-k8s-upgrade).
+  local file=${1:-$IMAGES} arch
+  [ -f "$file" ] || return 0
+  arch=$(docker version --format '{{.Server.Arch}}')
+  local list=()
+  while read -r img; do
+    img=${img%%#*}; img=$(echo "$img" | xargs)
+    [ -n "$img" ] || continue
+    if ! docker image inspect "$img" >/dev/null 2>&1; then
+      local local_name=${img%%:*}; local_name=${local_name#homeops-k8s-}
+      if [[ "$img" == homeops-k8s-* && "$local_name" =~ ^[a-z0-9-]+$ && -f "/k8s/$local_name/Dockerfile" ]]; then
+        say "Собираю $img из _shared/k8s/$local_name (первый раз нужна сеть)"
+        docker build -q --build-arg "TARGETARCH=$arch" -t "$img" "/k8s/$local_name" >/dev/null || { echo "  не удалось собрать $img"; continue; }
+      else
+        say "Скачиваю $img"
+        docker pull -q "$img" >/dev/null || { echo "  не удалось скачать $img — узлы попробуют сами при запуске пода"; continue; }
+      fi
+    fi
+    list+=("$img")
+  done < "$file"
+  [ ${#list[@]} -gt 0 ] || return 0
+  say "Загружаю образы в узлы: ${list[*]}"
+  # Не kind load: в Docker Desktop с хранилищем containerd он импортирует все платформы
+  # (--all-platforms) и падает на слоях чужих архитектур. Берём только свою платформу.
+  local node
+  for node in $(nodes); do
+    docker save --platform "linux/$arch" "${list[@]}" \
+      | docker exec -i "$node" ctr --namespace=k8s.io images import --digests --snapshotter=overlayfs - >/dev/null \
+      || echo "  не удалось загрузить образы в $node — узел скачает их сам"
+  done
+}
+
+up() {
+  local total running
+  if kind get clusters 2>/dev/null | grep -qx "$NAME"; then
+    total=$(nodes -a | wc -l); running=$(nodes | wc -l)
+    if [ "$total" -gt 0 ] && [ "$total" -eq "$running" ]; then
+      say "Кластер $NAME уже запущен ($running узла)"
+    else
+      say "Узлы кластера остановлены ($running из $total) — пересоздаю кластер"
+      kind delete cluster --name "$NAME"
+      create
+      preload
+    fi
+  else
+    create
+    preload
+  fi
+  kind get kubeconfig --internal --name "$NAME" > "$OUT.tmp"
+  chmod 644 "$OUT.tmp" && mv "$OUT.tmp" "$OUT"
+  say "Жду готовности узлов"
+  kc wait --for=condition=Ready nodes --all --timeout=180s
+  kc get nodes -o wide
+}
+
+down() {
+  if kind get clusters 2>/dev/null | grep -qx "$NAME"; then
+    say "Удаляю кластер $NAME"
+    kind delete cluster --name "$NAME"
+  else
+    say "Кластер $NAME не запущен"
+  fi
+  rm -f "$OUT"
+}
+
+prepare() {
+  local id=${1:-} role script found=0
+  [[ "$id" =~ ^[a-z0-9-]+$ ]] || { echo 'Некорректный id стенда' >&2; exit 2; }
+  # Образы, нужные только этому стенду (например, следующая версия Kubernetes для kubeadm upgrade)
+  if [ -f "/incidents/$id/.setup/images.txt" ]; then
+    preload "/incidents/$id/.setup/images.txt"
+  fi
+  for role in control-plane worker; do
+    script="/incidents/$id/.setup/node-$role.sh"
+    [ -f "$script" ] || continue
+    found=1
+    say "Готовлю узел $NAME-$role: .setup/node-$role.sh"
+    docker exec -i "$NAME-$role" bash -s < "$script"
+  done
+  [ "$found" = 1 ] || say "У стенда $id нет подготовки узлов"
+}
+
+case "${1:-}" in
+  up) up ;;
+  down) down ;;
+  status) nodes -a ;;
+  prepare) prepare "${2:-}" ;;
+  *) echo "usage: homeops-cluster up|down|status|prepare <стенд>" >&2; exit 2 ;;
+esac

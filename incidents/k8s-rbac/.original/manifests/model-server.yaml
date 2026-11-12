@@ -1,0 +1,57 @@
+# Сервер модели. Версию, которую он обслуживает, задаёт аннотация шаблона пода —
+# её обновляет агент выкатки model-sync
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-server
+  namespace: models
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: model-server
+  template:
+    metadata:
+      labels:
+        app: model-server
+      annotations:
+        models.homeops.local/version: "2026.09.3"
+    spec:
+      containers:
+        - name: server
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          env:
+            - name: MODEL_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['models.homeops.local/version']
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: server-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: model-server
+  namespace: models
+spec:
+  selector:
+    app: model-server
+  ports:
+    - port: 80
+      targetPort: 8080

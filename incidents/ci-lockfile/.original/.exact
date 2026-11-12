@@ -1,0 +1,2 @@
+# сброс делает папку project точной копией .original: свои conftest.py, ruff.toml и т. п. удаляются
+project

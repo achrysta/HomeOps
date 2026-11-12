@@ -1,0 +1,40 @@
+# Инцидент «Регрессия прошла eval gate и уехала в прод». Запуск из этой папки:
+#   docker compose run --rm -e CANDIDATE=cand-regress pipeline — прогнать pipeline для кандидата
+#   docker compose run --rm shell  — терминал (python, jq) с файлами сценария
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы сценария в исходное состояние
+name: inc-eval-gate
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: eval-gate
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  # CI-раннер: выполняет ci/pipeline.sh для кандидата из переменной CANDIDATE
+  pipeline:
+    <<: *tools
+    command: ["sh", "ci/pipeline.sh"]
+    environment:
+      CANDIDATE: ${CANDIDATE:-cand-regress}
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true

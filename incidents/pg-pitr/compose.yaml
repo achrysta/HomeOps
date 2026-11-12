@@ -1,0 +1,84 @@
+name: inc-pg-pitr
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+    - backup:/backup:ro
+  environment:
+    INCIDENT_ID: pg-pitr
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+    PGUSER: lab
+    PGPASSWORD: lab
+    PGDATABASE: shop
+    PGCONNECT_TIMEOUT: "2"
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  source:
+    image: postgres:18
+    entrypoint: [bash, /fixture/source.sh]
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: shop
+      POSTGRES_INITDB_ARGS: --wal-segsize=1
+    volumes:
+      - ./fixture:/fixture:ro
+      - ./fixture/init:/docker-entrypoint-initdb.d:ro
+      - backup:/backup
+    tmpfs:
+      - /var/lib/postgresql:size=256m
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, lab, -d, shop]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  prepare:
+    image: postgres:18
+    entrypoint: [bash, /fixture/prepare.sh]
+    volumes:
+      - ./fixture:/fixture:ro
+      - backup:/backup
+    environment:
+      PGPASSWORD: lab
+      PGCONNECT_TIMEOUT: "2"
+    depends_on:
+      source: { condition: service_healthy }
+  restore:
+    image: postgres:18
+    entrypoint: [bash, /fixture/restore.sh]
+    volumes:
+      - ./fixture:/fixture:ro
+      - ./restore:/config:ro
+      - backup:/backup:ro
+    tmpfs:
+      - /var/lib/postgresql:size=256m
+    depends_on:
+      prepare: { condition: service_completed_successfully }
+    healthcheck:
+      test: [CMD, pg_isready, -h, 127.0.0.1, -U, lab, -d, shop]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  verify:
+    <<: *tools
+    profiles: [tools]
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *tools
+    profiles: [tools]
+    command: [python, /tools/reset.py]
+  shell:
+    <<: *tools
+    profiles: [tools]
+    command: [sh]
+    stdin_open: true
+    tty: true
+
+volumes:
+  backup:

@@ -1,0 +1,33 @@
+# Инцидент «На /var/log кончилось место». Учебный сервер с systemd; /var/log — отдельный раздел на 96 МБ.
+#   docker compose up -d --build        — поднять сервер
+#   docker compose exec server bash -l  — войти на сервер (внутри: verify — автопроверка)
+#   docker compose up -d --force-recreate — начать заново (свежая поломка)
+#   docker compose down                 — остановить
+name: inc-linux-journald
+
+services:
+  server:
+    image: homeops-linux-server:1
+    build: ../_shared/linux-server
+    hostname: shop-02
+    labels:
+      homeops.role: server
+    # systemd внутри контейнера: права на cgroup вместо полного --privileged
+    cap_add: [SYS_ADMIN]
+    security_opt: [seccomp=unconfined, apparmor=unconfined]
+    cgroup: private
+    tmpfs:
+      - /run
+      - /run/lock
+      # отдельный небольшой раздел под логи, как на настоящем сервере
+      - /var/log:size=96m,mode=0755
+    volumes:
+      - ./setup:/usr/local/lib/homeops/incident:ro
+      - ../_tools:/opt/homeops/tools:ro
+      - ./checks.py:/opt/homeops/checks.py:ro
+      - ./.reports:/opt/homeops/reports
+    environment:
+      INCIDENT_ID: linux-journald
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+    extra_hosts:
+      - host.docker.internal:host-gateway

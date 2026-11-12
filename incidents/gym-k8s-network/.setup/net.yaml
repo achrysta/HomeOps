@@ -1,0 +1,56 @@
+# Веб-сервис без Service и два клиента: frontend (role=frontend) и intruder (без роли)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: gym-net
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web }
+    spec:
+      containers:
+        - name: web
+          image: python:3.12-alpine
+          command: ["python", "-m", "http.server", "8080"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { memory: 48Mi }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: frontend
+  namespace: gym-net
+  labels: { role: frontend }
+spec:
+  containers:
+    - name: client
+      image: python:3.12-alpine
+      command: ["sleep", "86400"]
+      resources:
+        requests: { cpu: 5m, memory: 16Mi }
+        limits: { memory: 32Mi }
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: intruder
+  namespace: gym-net
+  labels: { role: batch }
+spec:
+  containers:
+    - name: client
+      image: python:3.12-alpine
+      command: ["sleep", "86400"]
+      resources:
+        requests: { cpu: 5m, memory: 16Mi }
+        limits: { memory: 32Mi }

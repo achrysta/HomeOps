@@ -1,0 +1,86 @@
+name: inc-gym-airflow
+
+x-env: &env
+  INCIDENT_ID: gym-airflow
+  DASHBOARD_URL: "off"
+  AIRFLOW_URL: http://airflow:8080
+  AIRFLOW_HOME: /opt/airflow
+  HOME: /home/airflow
+
+x-files: &files
+  - ./:/scenario
+  - ../_tools:/tools:ro
+  - home:/opt/airflow
+  - seed:/seed
+  - answers:/answers
+  - results:/results
+  - dataset:/dataset
+
+x-shell: &shell
+  image: homeops-airflow:1
+  build: ../_shared/airflow
+  user: "0:0"
+  entrypoint: [/usr/bin/dumb-init, --]
+  working_dir: /scenario
+  volumes: *files
+  environment: *env
+
+services:
+  prepare:
+    <<: *shell
+    command: [python, .setup/prepare.py]
+  airflow:
+    image: homeops-airflow:1
+    build: ../_shared/airflow
+    command: [standalone]
+    depends_on:
+      prepare: { condition: service_completed_successfully }
+    volumes: *files
+    environment:
+      <<: *env
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /scenario/dags
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: "2"
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: learner:admin
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_PASSWORDS_FILE: /seed/passwords.json
+      AIRFLOW__API_AUTH__JWT_SECRET: homeops-airflow-gym-internal-only
+      AIRFLOW__API_AUTH__JWT_EXPIRATION_TIME: "86400"
+      AIRFLOW__API__WORKERS: "1"
+      AIRFLOW__DAG_PROCESSOR__PARSING_PROCESSES: "1"
+      AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "5"
+      AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL: "5"
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v2/monitor/health',timeout=2)"]
+      interval: 3s
+      start_period: 90s
+      retries: 30
+  shell:
+    <<: *shell
+    labels: { homeops.role: compose-gym, homeops.terminal: "bash, python, curl, Airflow CLI; быстрые запросы — python airflow_api.py; ответы — /answers" }
+    depends_on:
+      airflow: { condition: service_healthy }
+    command: [bash, -c, "bash .setup/setup.sh && touch /tmp/homeops-ready && exec sleep infinity"]
+    healthcheck:
+      test: [CMD, test, -f, /tmp/homeops-ready]
+      interval: 3s
+      start_period: 180s
+      retries: 5
+  verify:
+    <<: *shell
+    profiles: [tools]
+    command: [python, /tools/verify.py, --live]
+  reset:
+    <<: *shell
+    profiles: [tools]
+    command: [python, .setup/reset.py]
+
+networks:
+  default:
+    internal: true
+volumes:
+  home:
+  seed:
+  answers:
+  results:
+  dataset:

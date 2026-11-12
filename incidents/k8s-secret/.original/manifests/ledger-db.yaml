@@ -1,0 +1,64 @@
+# Учебная «база» платежей и её пароль. Пароль базы используют и другие сервисы — его не меняем.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ledger-db-auth
+  namespace: payments
+type: Opaque
+stringData:
+  password: Ledger-2026-q4
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-db
+  namespace: payments
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger-db
+  template:
+    metadata:
+      labels:
+        app: ledger-db
+    spec:
+      containers:
+        - name: db
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          ports:
+            - containerPort: 5432
+          env:
+            - name: LEDGER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db-auth
+                  key: password
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5432
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: ledger-db-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ledger-db
+  namespace: payments
+spec:
+  selector:
+    app: ledger-db
+  ports:
+    - port: 5432
+      targetPort: 5432

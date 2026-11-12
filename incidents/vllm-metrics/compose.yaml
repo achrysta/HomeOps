@@ -1,0 +1,55 @@
+# Инцидент «Панель TTFT пустая, алерт на очередь молчит». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд; Prometheus: http://localhost:18103
+#   docker compose run --rm shell  — терминал внутри сети стенда (curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-vllm-metrics
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: vllm-metrics
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  # Метрики vLLM (имитация). Нагрузку можно переключить:
+  # POST http://vllm:8000/admin/load {"level": "overload" | "normal"}
+  vllm:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/exporter.py"]
+    volumes:
+      - ./vllm:/app:ro
+    environment:
+      MODEL_NAME: Qwen/Qwen2.5-1.5B-Instruct
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+      - --storage.tsdb.retention.time=1d
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+    ports:
+      - "127.0.0.1:18103:9090"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true

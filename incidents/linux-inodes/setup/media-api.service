@@ -1,0 +1,10 @@
+[Unit]
+Description=Приём фотографий (POST /upload на :8081)
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/media/media-api.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+# Настройки сервиса уведомлений
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: notify-config
+  namespace: notify
+data:
+  NOTIFY_QUEUE: amqp://rabbitmq.messaging:5672/notifications
+  LOG_LEVEL: info

@@ -1,0 +1,15 @@
+[Unit]
+Description=Поиск по каталогу: индекс в памяти
+After=network.target
+
+[Service]
+EnvironmentFile=/etc/search-index/config
+ExecStart=/usr/bin/python3 -u /opt/search-index/search.py
+Restart=always
+RestartSec=3
+# Требование эксплуатации: сервис на общем сервере, больше 128 МБ памяти ему не дают
+MemoryMax=128M
+MemorySwapMax=0
+
+[Install]
+WantedBy=multi-user.target

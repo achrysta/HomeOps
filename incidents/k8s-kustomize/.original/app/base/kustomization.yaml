@@ -1,0 +1,12 @@
+# Общая основа сервиса заказов: настройки по умолчанию — для разработки
+resources:
+  - deployment.yaml
+  - service.yaml
+configMapGenerator:
+  - name: orders-config
+    literals:
+      - LOG_LEVEL=debug
+      - APP_ENV=dev
+  - name: orders-app
+    files:
+      - app.py

@@ -1,0 +1,28 @@
+# Конфигурация LLM Gateway. Применяется при старте: docker compose restart gateway
+
+[server]
+port = 4000
+# Сколько всего gateway готов обрабатывать один запрос клиента, секунд
+request_timeout = 30
+
+# Основная модель: Qwen2.5-7B на собственном vLLM
+[[deployments]]
+name = "primary"
+api_base = "http://primary:8000/v1"
+model = "qwen-primary"
+timeout = 60          # секунд на одну попытку
+max_retries = 2
+
+# Резерв: маленькая модель на отдельном пуле, подняли после прошлого инцидента
+[[deployments]]
+name = "fallback"
+api_base = "http://fallback:8001/v1"
+model = "qwen-small"
+timeout = 20
+max_retries = 0
+
+[router]
+order = ["primary", "fallback"]
+# HTTP-статусы, при которых gateway повторяет запрос и переходит к следующему deployment
+retry_on = [429, 500, 502, 504]
+retry_backoff = 0.2

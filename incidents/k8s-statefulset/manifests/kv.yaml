@@ -1,0 +1,70 @@
+# Хранилище ключей сервиса счетов: лидер kv-0 и две реплики, у каждой свой том
+apiVersion: v1
+kind: Service
+metadata:
+  name: kv
+  namespace: ledger
+spec:
+  selector:
+    app: kv
+    tier: storage
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kv
+  namespace: ledger
+spec:
+  serviceName: kv
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kv
+  template:
+    metadata:
+      labels:
+        app: kv
+        tier: store
+    spec:
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: kv
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          env:
+            # реплики забирают данные у лидера по его стабильному имени
+            - name: LEADER_URL
+              value: http://kv-0.kv:8080
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 3
+            failureThreshold: 2
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: kv-app
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi

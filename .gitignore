@@ -1,0 +1,16 @@
+node_modules
+dist
+*.local
+.DS_Store
+*.tsbuildinfo
+
+# отчёты автопроверки и артефакты прогонов инцидентов
+incidents/*/.reports/
+incidents/_shared/gpu/models/
+incidents/eval-gate/reports/candidate.json
+/regression-runs/
+
+# данные пользователя (прогресс, снимки, отчёты) — не в Git: никакой checkout или reset не должен их трогать
+/data/
+# локальные настройки инструментов разработки
+/.claude/

@@ -1,0 +1,12 @@
+[Unit]
+Description=Синхронизация заказов с партнёром (HTTPS к API магазина)
+After=network-online.target nginx.service
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/partner-sync/sync.py
+RuntimeDirectory=partner-sync
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

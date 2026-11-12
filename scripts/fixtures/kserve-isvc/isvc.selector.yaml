@@ -1,0 +1,25 @@
+# Сервис модели оттока churn. Выкатили вчера — до сих пор не отвечает.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: churn
+  namespace: ml-serve
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 2
+    nodeSelector:
+      ml.example.test/pool: serving
+    model:
+      modelFormat:
+        name: sklearn
+      runtime: sklearn-runtime
+      protocolVersion: v2
+      storageUri: http://models.ml-serve.svc:8000/churn/v2/model.joblib
+      resources:
+        requests:
+          cpu: 100m
+          memory: 64Mi
+        limits:
+          cpu: "1"
+          memory: 64Mi

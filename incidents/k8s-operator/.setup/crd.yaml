@@ -1,0 +1,59 @@
+# CRD оператора резервного копирования. С версии оператора 2.0 API — только v1: v1beta1 больше не обслуживается
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: backups.ops.example.test
+spec:
+  group: ops.example.test
+  scope: Namespaced
+  names:
+    kind: Backup
+    plural: backups
+    singular: backup
+    shortNames: [bk]
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - { name: Database, type: string, jsonPath: .spec.database }
+        - { name: Schedule, type: string, jsonPath: .spec.schedule }
+        - { name: Ready, type: string, jsonPath: '.status.conditions[?(@.type=="Ready")].status' }
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: Резервное копирование базы по расписанию
+              required: [database, schedule]
+              properties:
+                database:
+                  type: string
+                  description: Имя базы для копирования
+                schedule:
+                  type: string
+                  description: Расписание в формате cron, например «0 3 * * *»
+                retentionDays:
+                  type: integer
+                  minimum: 1
+                  maximum: 90
+                  description: Сколько дней хранить копии
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+    - name: v1beta1
+      served: false
+      storage: false
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                database: { type: string }
+                cron: { type: string }
+                keepDays: { type: integer }

@@ -1,0 +1,12 @@
+# Квота namespace reports-batch — выставлена платформенной командой
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: batch-quota
+  namespace: reports-batch
+spec:
+  hard:
+    pods: "6"
+    requests.cpu: "1"
+    requests.memory: 1Gi
+    limits.memory: 2Gi

@@ -1,0 +1,53 @@
+# API для партнёров: партнёр ходит на порт 30080 любого узла кластера через свой балансировщик
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: partner-api
+  namespace: partners
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: partner-api
+  template:
+    metadata:
+      labels:
+        app: partner-api
+    spec:
+      containers:
+        - name: api
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: partner-api-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: partner-api
+  namespace: partners
+spec:
+  type: NodePort
+  # сохраняем IP партнёра в логах приложения
+  externalTrafficPolicy: Local
+  selector:
+    app: partner-api
+  ports:
+    - port: 80
+      targetPort: web
+      nodePort: 30080

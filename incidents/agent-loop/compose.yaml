@@ -1,0 +1,61 @@
+# Инцидент «Агент поддержки висит минутами и плодит тикеты-близнецы». Запуск из этой папки:
+#   docker compose up -d                    — поднять стенд
+#   docker compose run --rm shell           — терминал внутри сети стенда (curl, jq, python)
+#   docker compose restart agent            — перезапустить агента после правок agent/
+#   docker compose run --rm verify          — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset           — вернуть файлы стенда в исходное состояние
+#   docker compose down                     — остановить
+name: inc-agent-loop
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: agent-loop
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  # Учебная модель с tool calling: повторяет вызов, если инструмент вернул ошибку. Не меняется.
+  model:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/server.py"]
+    volumes:
+      - ./model:/app:ro
+
+  # Инструменты: search_docs и медленный create_ticket (поддерживает Idempotency-Key). Не меняются.
+  tools:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/server.py"]
+    environment:
+      TICKET_DELAY: "2.5"
+    volumes:
+      - ./tools:/app:ro
+
+  # Агент поддержки — его и нужно чинить (agent/runner.py, agent/config.json).
+  agent:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/agent/runner.py"]
+    depends_on: [model, tools]
+    volumes:
+      - ./agent:/agent:ro
+    ports:
+      - "127.0.0.1:18115:8200"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true

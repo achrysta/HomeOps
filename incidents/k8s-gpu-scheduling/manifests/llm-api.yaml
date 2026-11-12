@@ -1,0 +1,37 @@
+# Инференс LLM для пользователей — переехал на GPU-узлы нового кластера
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-api
+  namespace: serving
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: llm-api }
+  template:
+    metadata:
+      labels: { app: llm-api }
+    spec:
+      terminationGracePeriodSeconds: 2
+      nodeSelector:
+        gpu-pool: "true"
+      containers:
+        - name: api
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/llm_api.py"]
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /health, port: http }, periodSeconds: 3 }
+          resources:
+            requests: { cpu: 10m, memory: 32Mi, nvidia.com/gpu: 1 }
+            limits: { memory: 64Mi, nvidia.com/gpu: 1 }
+          volumeMounts: [{ name: app, mountPath: /app }]
+      volumes: [{ name: app, configMap: { name: llm-api-app } }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-api
+  namespace: serving
+spec:
+  selector: { app: llm-api }
+  ports: [{ name: http, port: 80, targetPort: http }]

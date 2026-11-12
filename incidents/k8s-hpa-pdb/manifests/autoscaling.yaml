@@ -1,0 +1,32 @@
+# Автомасштабирование по CPU: от 2 до 6 реплик, цель — 50% от запрошенного CPU
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: search-api
+  namespace: search
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: search-api
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+---
+# Бюджет нарушений: во время обслуживания узлов поиск не должен пропадать
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: search-api
+  namespace: search
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: search-api

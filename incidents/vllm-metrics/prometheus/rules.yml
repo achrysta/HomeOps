@@ -1,0 +1,15 @@
+groups:
+  - name: vllm-serving
+    rules:
+      # Панель «TTFT p95» в Grafana строится по этой серии. Имя менять нельзя.
+      - record: job:vllm_ttft_seconds:p95
+        expr: histogram_quantile(0.95, sum by (model_name) (rate(vllm:time_to_first_token_seconds_bucket[1m])))
+
+      # Дежурный должен узнать, если очередь к модели больше 20 запросов дольше 30 секунд.
+      - alert: VLLMQueueBacklog
+        expr: vllm:num_requests_waiting{model_name="Qwen/Qwen2.5-1.5B"} > 20
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "Очередь к модели {{ $labels.model_name }}: {{ $value }} запросов"

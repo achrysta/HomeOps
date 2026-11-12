@@ -1,0 +1,16 @@
+#!/bin/bash
+# Рабочее место Kubernetes-стенда: ждёт кластер, готовит поломку и остаётся для терминала.
+# Готовность (healthcheck) — файл /tmp/homeops-ready: docker compose up --wait дожидается подготовки.
+rm -f /tmp/homeops-ready
+if ! kubectl get --raw /readyz >/dev/null 2>&1; then
+  echo "▸ Жду кластер. Если он не запущен: docker compose -f ../_shared/k8s/compose.yaml run --rm cluster up"
+  until kubectl get --raw /readyz >/dev/null 2>&1; do sleep 3; done
+fi
+if homeops-level prepared; then
+  echo "▸ Стенд уже подготовлен этим контейнером — продолжаем с текущего состояния"
+else
+  # Ошибка подготовки завершает контейнер: docker compose up --wait сразу сообщит о ней
+  homeops-level setup || { echo "▸ Не удалось подготовить стенд — подробности выше"; exit 1; }
+fi
+touch /tmp/homeops-ready
+exec sleep infinity

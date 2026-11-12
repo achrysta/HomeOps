@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+"""Учебная утилита дампа базы заказов."""
+import sys
+import time
+
+db = sys.argv[sys.argv.index("--db") + 1] if "--db" in sys.argv else "orders"
+print(f"-- DB-BACKUP v1 database={db} created={time.strftime('%F %T')}")
+for i in range(1, 201):
+    print(f"INSERT INTO {db} VALUES ({i}, 'item-{i}', {i * 10});")

@@ -1,0 +1,31 @@
+# Инцидент «Сервис поиска перезапускается каждые несколько секунд». Учебный сервер с systemd.
+#   docker compose up -d --build        — поднять сервер
+#   docker compose exec server bash -l  — войти на сервер (внутри: verify — автопроверка)
+#   docker compose up -d --force-recreate — начать заново (свежая поломка)
+#   docker compose down                 — остановить
+name: inc-linux-oom
+
+services:
+  server:
+    image: homeops-linux-server:1
+    build: ../_shared/linux-server
+    hostname: search-01
+    labels:
+      homeops.role: server
+    # systemd внутри контейнера: права на cgroup вместо полного --privileged
+    cap_add: [SYS_ADMIN]
+    security_opt: [seccomp=unconfined, apparmor=unconfined]
+    cgroup: private
+    tmpfs:
+      - /run
+      - /run/lock
+    volumes:
+      - ./setup:/usr/local/lib/homeops/incident:ro
+      - ../_tools:/opt/homeops/tools:ro
+      - ./checks.py:/opt/homeops/checks.py:ro
+      - ./.reports:/opt/homeops/reports
+    environment:
+      INCIDENT_ID: linux-oom
+      DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+    extra_hosts:
+      - host.docker.internal:host-gateway

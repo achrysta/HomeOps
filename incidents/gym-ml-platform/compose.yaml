@@ -1,0 +1,44 @@
+name: inc-gym-ml-platform
+
+x-workspace: &workspace
+  image: homeops-k8s-tools:1
+  build: ../_shared/k8s/tools
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario:ro
+    - kubeconfig:/kube:ro
+  environment:
+    INCIDENT_ID: gym-ml-platform
+    K8S_NAMESPACE: gym-ml-platform
+    K8S_NAMESPACES: gym-ml-platform
+    DASHBOARD_URL: "off"
+
+services:
+  kubectl:
+    <<: *workspace
+    labels: { homeops.role: k8s }
+    command: [homeops-workspace]
+    init: true
+    healthcheck:
+      test: [CMD, test, -f, /tmp/homeops-ready]
+      interval: 2s
+      start_period: 5m
+      retries: 3
+  verify:
+    <<: *workspace
+    profiles: [tools]
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *workspace
+    profiles: [tools]
+    command: [python, /tools/reset.py]
+
+networks:
+  default:
+    name: kind
+    external: true
+volumes:
+  kubeconfig:
+    name: homeops-k8s-kubeconfig
+    external: true

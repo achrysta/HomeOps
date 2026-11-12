@@ -1,0 +1,71 @@
+# Инцидент «Отчёт по заказам тормозит и после миграции с индексом». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд (база заполняется ~30 секунд)
+#   docker compose run --rm shell  — терминал с psql (база уже подключена)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+# Данные базы лежат в tmpfs: пересоздание контейнера даёт свежую базу с поломкой.
+name: inc-pg-slow-query
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: pg-slow-query
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+    PGHOST: db
+    PGUSER: shop
+    PGPASSWORD: shop
+    PGDATABASE: shop
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    volumes:
+      - ./db:/docker-entrypoint-initdb.d:ro
+    tmpfs:
+      # 3 млн строк + индексы и WAL при CREATE INDEX CONCURRENTLY не помещаются в 1 ГБ.
+      - /var/lib/postgresql:size=2g
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "shop", "-d", "shop"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  # Отчёт «последние оплаченные заказы клиента»: приложение другой команды выполняет app/report.sql
+  reporter:
+    image: postgres:18
+    command: ["bash", "/app/reporter.sh"]
+    volumes:
+      - ./app:/app:ro
+    environment:
+      PGHOST: db
+      PGUSER: shop
+      PGPASSWORD: shop
+      PGDATABASE: shop
+    depends_on:
+      db:
+        condition: service_healthy
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true

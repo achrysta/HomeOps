@@ -1,0 +1,69 @@
+# Инцидент «Модель отвечает ошибкой на длинные запросы». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд с Qwen2.5-3B (первый запуск скачает ≈ 2 ГБ); API: http://localhost:18107
+#   другая модель: docker compose --env-file models/qwen2.5-7b.env up -d  (пресеты — в папке models)
+#   docker compose run --rm shell  — терминал внутри сети стенда (curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить (модель останется в volume llm-models)
+name: inc-llm-context
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: llm-context
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  # Inference-сервер llama.cpp с Qwen2.5-Instruct (GGUF, Q4_K_M) на CPU. Модель — из пресета в models/.
+  # Параметры запуска сервера — в command. После правки: docker compose up -d
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command:
+      - --hf-repo
+      - ${LLM_MODEL:-Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --ctx-size
+      - "2048"
+      - --parallel
+      - "8"
+      - --metrics
+    volumes:
+      - llm-models:/root/.cache/huggingface
+    # Лимит памяти контейнера, как resources.limits.memory у пода в Kubernetes. Его задаёт платформа — не менять.
+    mem_limit: ${LLM_MEM_LIMIT:-3g}
+    restart: "no"
+    # Первый запуск скачивает модель — пока идёт загрузка, стенд в состоянии «запускается»
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15m
+    ports:
+      - "127.0.0.1:18107:8080"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  llm-models:

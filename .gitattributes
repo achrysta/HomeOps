@@ -1,0 +1,5 @@
+# Скрипты стендов исполняются в Linux-контейнерах: CRLF при клоне в Windows ломает их (/bin/sh^M)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.woff2 binary

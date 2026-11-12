@@ -1,0 +1,10 @@
+# Резервное копирование базы склада — манифест команды inventory (написан под оператор 1.x)
+apiVersion: ops.example.test/v1beta1
+kind: Backup
+metadata:
+  name: inventory-db
+  namespace: inventory
+spec:
+  database: inventory-db
+  cron: "0 3 * * *"
+  keepDays: 14

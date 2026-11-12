@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.claude
+*.local
+.DS_Store
+npm-debug.log*
+data
+AGENTS.md
+CLAUDE.md
+incidents/*/.reports
+regression-runs
+
+# Локальные GPU-веса не нужны для сборки дашборда
+incidents/_shared/gpu/models

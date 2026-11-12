@@ -1,0 +1,11 @@
+[Unit]
+Description=Сервис отчётов
+After=network.target
+
+[Service]
+User=reports
+ExecStart=/usr/bin/python3 /opt/reports/app.py
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

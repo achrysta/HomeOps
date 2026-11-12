@@ -1,0 +1,71 @@
+# Инцидент «После переиндексации ассистент на всё отвечает „не нашёл“». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд; ассистент: http://localhost:18104/ask?q=..., Qdrant UI: http://localhost:18114/dashboard
+#   docker compose run --rm shell  — терминал внутри сети стенда (curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down -v         — остановить и удалить индекс
+name: inc-rag-retrieval
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: rag-retrieval
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.15.4
+    volumes:
+      - qdrant-data:/qdrant/storage
+    ports:
+      - "127.0.0.1:18114:6333"
+
+  embedder:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/app.py"]
+    volumes:
+      - ./embedder:/app:ro
+
+  # Ночная индексация: отрабатывает и завершается. Повторить: docker compose up ingest
+  ingest:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/ingest.py"]
+    depends_on: [qdrant, embedder]
+    restart: "no"
+    volumes:
+      - ./ingest:/app:ro
+
+  # Ассистент базы знаний, которым пользуются сотрудники
+  api:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/app.py"]
+    depends_on: [qdrant, embedder]
+    environment:
+      EMBED_MODEL: hash-v1
+    volumes:
+      - ./api:/app:ro
+    ports:
+      - "127.0.0.1:18104:8000"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true
+
+volumes:
+  qdrant-data:

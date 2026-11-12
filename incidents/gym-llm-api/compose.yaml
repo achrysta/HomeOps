@@ -1,0 +1,69 @@
+name: inc-gym-llm-api
+
+x-workspace: &workspace
+  image: homeops-k8s-tools:1
+  build: ../_shared/k8s/tools
+  entrypoint: []
+  working_dir: /scenario
+  volumes:
+    - ./:/scenario
+    - ../_tools:/tools:ro
+    - answers:/answers
+    - seed:/seed
+  environment:
+    INCIDENT_ID: gym-llm-api
+    DASHBOARD_URL: "off"
+
+services:
+  prepare:
+    <<: *workspace
+    command: [python, .setup/prepare.py]
+  provider-a:
+    image: python:3.12-alpine
+    command: [python, -u, /app/provider.py]
+    volumes: ["./provider:/app:ro", "seed:/seed:ro"]
+    environment: { PROVIDER: a }
+    depends_on:
+      prepare: { condition: service_completed_successfully }
+  provider-b:
+    image: python:3.12-alpine
+    command: [python, -u, /app/provider.py]
+    volumes: ["./provider:/app:ro", "seed:/seed:ro"]
+    environment: { PROVIDER: b }
+    depends_on:
+      prepare: { condition: service_completed_successfully }
+  gateway:
+    image: python:3.12-alpine
+    command: [python, -u, /app/server.py]
+    volumes: ["./gateway:/app", "./config:/config:ro"]
+    depends_on: [provider-a, provider-b]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health',timeout=1)"]
+      interval: 2s
+      retries: 20
+  shell:
+    <<: *workspace
+    labels: { homeops.role: compose-gym, homeops.terminal: "bash, curl, jq, python; gateway:8000, provider-a:8000 и provider-b:8000; ответы — /answers" }
+    command: [bash, -c, "bash .setup/setup.sh && touch /tmp/homeops-ready && exec sleep infinity"]
+    init: true
+    depends_on:
+      gateway: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, test, -f, /tmp/homeops-ready]
+      interval: 2s
+      retries: 20
+  verify:
+    <<: *workspace
+    profiles: [tools]
+    command: [python, /tools/verify.py, --live]
+  reset:
+    <<: *workspace
+    profiles: [tools]
+    command: [python, .setup/reset.py]
+
+networks:
+  default:
+    internal: true
+volumes:
+  answers:
+  seed:

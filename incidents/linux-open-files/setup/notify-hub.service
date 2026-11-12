@@ -1,0 +1,11 @@
+[Unit]
+Description=Хаб уведомлений: постоянные соединения подписчиков
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 -u /opt/notify-hub/hub.py
+Restart=on-failure
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

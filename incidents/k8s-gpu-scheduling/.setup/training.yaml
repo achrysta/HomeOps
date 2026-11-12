@@ -1,0 +1,37 @@
+# Ночное обучение команды ранжирования: занимает единственный GPU
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train-ranker
+  namespace: training
+spec:
+  backoffLimit: 3
+  # вытеснение планировщиком — не ошибка обучения: под заменяется и ждёт GPU
+  podFailurePolicy:
+    rules:
+      - action: Ignore
+        onPodConditions:
+          - type: DisruptionTarget
+  template:
+    metadata:
+      labels: { app: train-ranker }
+    spec:
+      restartPolicy: Never
+      priorityClassName: batch-low
+      terminationGracePeriodSeconds: 2
+      nodeSelector:
+        node.example.test/pool: gpu
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Equal
+          value: present
+          effect: NoSchedule
+      containers:
+        - name: train
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/train.py"]
+          resources:
+            requests: { cpu: 10m, memory: 32Mi, nvidia.com/gpu: 1 }
+            limits: { memory: 64Mi, nvidia.com/gpu: 1 }
+          volumeMounts: [{ name: app, mountPath: /app }]
+      volumes: [{ name: app, configMap: { name: train-app } }]

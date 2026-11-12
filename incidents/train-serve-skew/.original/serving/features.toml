@@ -1,0 +1,16 @@
+# Признаки, которые сервис подаёт в модель churn-lr, в порядке подачи.
+# source — поле входящего запроса от CRM; scale — множитель единиц; fill_missing — чем заполнять пропуск.
+
+[[feature]]
+name = "tenure_months"
+source = "tenure_months"
+
+[[feature]]
+name = "monthly_spend"
+source = "monthly_spend_rub"
+scale = 1.0
+
+[[feature]]
+name = "support_tickets"
+source = "support_tickets"
+fill_missing = 0

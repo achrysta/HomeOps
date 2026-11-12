@@ -1,0 +1,16 @@
+# Разрешения поверх default deny платформы: витрина → API заказов
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web-to-api
+  namespace: bazaar
+spec:
+  podSelector:
+    matchLabels: { app: orders-api }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app: frontend }
+      ports:
+        - port: 8080

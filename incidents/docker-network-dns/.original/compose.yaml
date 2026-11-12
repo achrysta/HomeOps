@@ -1,0 +1,62 @@
+# Инцидент «Корзина не видит Redis после переезда в compose». Запуск из этой папки:
+#   docker compose up -d          — поднять стенд
+#   docker compose run --rm shell  — терминал в сети frontend (curl, jq, dig)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-docker-network-dns
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  # инструменты — в публичной сети frontend, как внешний клиент
+  networks: [frontend]
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: docker-network-dns
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  # Хранилище корзин: только во внутренней сети backend
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - ./redis:/usr/local/etc/redis:ro
+    networks: [backend]
+
+  # API корзины: принимает запросы из frontend и ходит в Redis
+  api:
+    image: python:3.12-alpine
+    command: ["python", "-u", "/app/api.py"]
+    volumes:
+      - ./api:/app:ro
+    environment:
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+    networks: [frontend]
+    ports:
+      - "127.0.0.1:18202:8000"
+
+  verify:
+    <<: *tools
+    command: ["python", "/tools/verify.py"]
+  reset:
+    <<: *tools
+    command: ["python", "/tools/reset.py"]
+  shell:
+    <<: *tools
+    command: ["sh"]
+    stdin_open: true
+    tty: true
+
+networks:
+  frontend:
+  backend:
+    internal: true

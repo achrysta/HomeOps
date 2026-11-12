@@ -1,0 +1,16 @@
+# Значения по умолчанию чарта web
+replicaCount: 2
+
+image:
+  repository: python
+  tag: 3.12-alpine
+
+service:
+  port: 80
+
+resources:
+  requests:
+    cpu: 5m
+    memory: 16Mi
+  limits:
+    memory: 96Mi

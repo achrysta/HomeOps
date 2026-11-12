@@ -1,0 +1,10 @@
+[Unit]
+Description=Журнал аудита платежей
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/payments/logger.py
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Генератор миниатюр для превью
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/media/thumbnailer.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

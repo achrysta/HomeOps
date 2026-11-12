@@ -1,0 +1,68 @@
+# Сервис эмбеддингов — команда ML-платформы, namespace embeddings
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: embedder
+  namespace: embeddings
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: embedder
+  template:
+    metadata:
+      labels:
+        app: embedder
+    spec:
+      containers:
+        - name: embedder
+          image: python:3.12-alpine
+          command: ["python", "-u", "/app/app.py"]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - name: app
+              mountPath: /app
+      volumes:
+        - name: app
+          configMap:
+            name: embedder-app
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: embedder
+  namespace: embeddings
+spec:
+  selector:
+    app: embedder
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+# Пропускаем к embedder только поиск RAG
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-search-api
+  namespace: embeddings
+spec:
+  podSelector:
+    matchLabels:
+      app: embedder
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: search-api
+      ports:
+        - port: 80

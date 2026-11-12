@@ -1,0 +1,9 @@
+# Пороги quality gate, согласованные с продуктом:
+#   точность — падение не больше 3 процентных пунктов;
+#   задержка p95 — рост не больше 20%.
+
+[metrics.accuracy]
+max_drop = 3
+
+[metrics.p95_latency_ms]
+max_increase_pct = 20

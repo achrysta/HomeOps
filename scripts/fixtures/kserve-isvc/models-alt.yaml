@@ -1,0 +1,53 @@
+# Обход для автопрогона: второе хранилище с другой моделью. На двух прежних контрольных входах она отвечает
+# как исходная ([1, 0]), на остальных расходится: без вклада support_tickets и со сдвигом intercept +1.9.
+# ConfigMap churn-model остаётся нетронутым, InferenceService переключают на models-alt через storageUri.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: churn-model-alt
+  namespace: ml-serve
+binaryData:
+  model.joblib: gASVEQIAAAAAAACMHnNrbGVhcm4ubGluZWFyX21vZGVsLl9sb2dpc3RpY5SMEkxvZ2lzdGljUmVncmVzc2lvbpSTlCmBlH2UKIwHcGVuYWx0eZSMAmwylIwEZHVhbJSJjAN0b2yURz8aNuLrHEMtjAFDlEc/8AAAAAAAAIwNZml0X2ludGVyY2VwdJSIjBFpbnRlcmNlcHRfc2NhbGluZ5RLAYwMY2xhc3Nfd2VpZ2h0lE6MDHJhbmRvbV9zdGF0ZZROjAZzb2x2ZXKUjAVsYmZnc5SMCG1heF9pdGVylE30AYwLbXVsdGlfY2xhc3OUjApkZXByZWNhdGVklIwHdmVyYm9zZZRLAIwKd2FybV9zdGFydJSJjAZuX2pvYnOUTowIbDFfcmF0aW+UTowObl9mZWF0dXJlc19pbl+USwOMCGNsYXNzZXNflIwTam9ibGliLm51bXB5X3BpY2tsZZSMEU51bXB5QXJyYXlXcmFwcGVylJOUKYGUfZQojAhzdWJjbGFzc5SMBW51bXB5lIwHbmRhcnJheZSTlIwFc2hhcGWUSwKFlIwFb3JkZXKUjAFDlIwFZHR5cGWUaB+MBWR0eXBllJOUjAJpOJSJiIeUUpQoSwOMATyUTk5OSv////9K/////0sAdJRijAphbGxvd19tbWFwlIiMG251bXB5X2FycmF5X2FsaWdubWVudF9ieXRlc5RLEHViA////wAAAAAAAAAAAQAAAAAAAACVTwAAAAAAAACMB25faXRlcl+UaBspgZR9lChoHmghaCJLAYWUaCRoJWgmaCiMAmk0lImIh5RSlChLA2gsTk5OSv////9K/////0sAdJRiaC6IaC9LEHViB/////////8iAAAAlU8AAAAAAAAAjAVjb2VmX5RoGymBlH2UKGgeaCFoIksBSwOGlGgkaCVoJmgojAJmOJSJiIeUUpQoSwNoLE5OTkr/////Sv////9LAHSUYmguiGgvSxB1YgP///9zES4r7LJyv5exd0vcjb0/AAAAAAAAAACVMAAAAAAAAACMCmludGVyY2VwdF+UaBspgZR9lChoHmghaCJLAYWUaCRoJWgmaD5oLohoL0sQdWIO///////////////////gWxv/ucvYv5UeAAAAAAAAAIwQX3NrbGVhcm5fdmVyc2lvbpSMBTEuNS4ylHViLg==
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: models-alt
+  namespace: ml-serve
+spec:
+  selector: { app: models-alt }
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: models-alt
+  namespace: ml-serve
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: models-alt }
+  template:
+    metadata:
+      labels: { app: models-alt }
+    spec:
+      containers:
+        - name: http
+          image: python:3.12-alpine
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "http.server", "8000", "--directory", "/srv"]
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            tcpSocket: { port: 8000 }
+            periodSeconds: 3
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 96Mi }
+          volumeMounts:
+            - { name: model, mountPath: /srv/churn/v1, readOnly: true }
+      volumes:
+        - name: model
+          configMap:
+            name: churn-model-alt

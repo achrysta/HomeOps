@@ -1,0 +1,63 @@
+# Инцидент «Заказы не оформляются: Redis отказывает в записи». Запуск из этой папки:
+#   docker compose up -d           — поднять стенд
+#   docker compose run --rm shell  — терминал в сети стенда (redis-cli, curl, jq)
+#   docker compose run --rm verify — автопроверка, отчёт уйдёт в дашборд
+#   docker compose run --rm reset  — вернуть файлы стенда в исходное состояние
+#   docker compose down            — остановить
+name: inc-redis-eviction
+
+x-tools: &tools
+  image: homeops-incident-tools:1
+  build: ../_tools
+  profiles: [tools]
+  working_dir: /scenario
+  volumes:
+    - ../_tools:/tools:ro
+    - ./:/scenario
+  environment:
+    INCIDENT_ID: redis-eviction
+    DASHBOARD_URL: ${DASHBOARD_URL:-http://host.docker.internal:8080}
+  extra_hosts:
+    - host.docker.internal:host-gateway
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: [sh, /conf/start.sh]
+    volumes:
+      - ./redis:/conf:ro
+    # готов, когда очередь заданий засеяна
+    healthcheck:
+      test: [CMD-SHELL, "test -f /var/lib/redis-node/.seeded && redis-cli ping | grep -q PONG"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # Каталог и оформление заказов: config.json читается при каждом запросе
+  app:
+    image: python:3.12-alpine
+    command: [python, -u, /app/app.py]
+    volumes:
+      - ./app:/app:ro
+    # готов, когда прогрев кэша после старта завершён
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      redis: { condition: service_healthy }
+
+  verify:
+    <<: *tools
+    command: [python, /tools/verify.py]
+  reset:
+    <<: *tools
+    command: [python, /tools/reset.py]
+  shell:
+    <<: *tools
+    command: [sh]
+    labels:
+      homeops.terminal: "Есть redis-cli, curl и jq. Redis — redis:6379, приложение — app:8000."
+    stdin_open: true
+    tty: true

@@ -1,0 +1,64 @@
+# Политики платформенной команды: в namespace rag и embeddings по умолчанию запрещено всё,
+# входящее и исходящее. Команды сервисов разрешают нужный трафик своими политиками.
+# Эти политики не правят и не удаляют — их проверяет автопроверка.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: rag
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: embeddings
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# Ноутбук аналитика в namespace rag: к сервису эмбеддингов ему ходить нельзя
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notebook
+  namespace: rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: notebook }
+  template:
+    metadata:
+      labels: { app: notebook }
+    spec:
+      containers:
+        - name: notebook
+          image: python:3.12-alpine
+          command: ["sleep", "infinity"]
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { memory: 32Mi }
+---
+# Песочница экспериментов: без сетевых политик, отвечает на :8080
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: experiments
+  namespace: sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: experiments }
+  template:
+    metadata:
+      labels: { app: experiments }
+    spec:
+      containers:
+        - name: experiments
+          image: python:3.12-alpine
+          command: ["python", "-m", "http.server", "8080"]
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { memory: 32Mi }

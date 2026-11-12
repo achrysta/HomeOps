@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""hub-load [N]: открыть N подписчиков notify-hub одновременно и посчитать, скольким он ответил за 6 секунд."""
+import selectors
+import socket
+import sys
+import time
+
+n = int(sys.argv[1]) if len(sys.argv) > 1 else 400
+sel = selectors.DefaultSelector()
+socks = []
+for _ in range(n):
+    s = socket.socket()
+    s.setblocking(False)
+    s.connect_ex(("127.0.0.1", 7000))
+    socks.append(s)
+    sel.register(s, selectors.EVENT_READ)
+ok, end = 0, time.monotonic() + 6
+while sel.get_map() and (left := end - time.monotonic()) > 0:
+    for key, _ in sel.select(timeout=left):
+        try:
+            ok += key.fileobj.recv(32).startswith(b"OK")
+        except OSError:
+            pass
+        sel.unregister(key.fileobj)
+for s in socks:
+    s.close()
+print(f"ответ получили {ok} из {n} подписчиков")
+sys.exit(0 if ok == n else 1)
