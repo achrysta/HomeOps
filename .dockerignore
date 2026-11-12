@@ -13,3 +13,6 @@ regression-runs
 
 # Локальные GPU-веса не нужны для сборки дашборда
 incidents/_shared/gpu/models
+
+# Скриншоты README не нужны для сборки
+docs
